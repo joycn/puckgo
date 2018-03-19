@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/joycn/dnsforward/cmd"
+	"github.com/joycn/puckgo/cmd"
 )
 
 func main() {

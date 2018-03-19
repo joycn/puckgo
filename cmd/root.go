@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/joycn/dnsforward/config"
+	"github.com/joycn/puckgo/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -66,6 +66,9 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&cfg.DefaultServer, "default", config.DefaultServer, "default dns server")
 	RootCmd.PersistentFlags().StringVar(&cfg.Listen, "listen", config.DefaultListen, "default dns server")
 	RootCmd.PersistentFlags().StringVar(&cfg.ExceptiveServer, "except", config.ExceptiveServer, "exceptive dns server")
+	RootCmd.PersistentFlags().StringVar(&cfg.ProxyListen, "proxylisten", config.DefaultProxyListen, "listen address for proxy")
+	RootCmd.PersistentFlags().IntVar(&cfg.ProxyTimeout, "timeout", config.DefaultProxyTimeout, "default timeout for proxy connection")
+	RootCmd.PersistentFlags().StringVar(&cfg.ProxyUpstream, "upstream", "61.49.62.26:1200", "default timeout for proxy connection")
 	//RootCmd.PersistentFlags().Lookup("defaultdrop").NoOptDefVal = true
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

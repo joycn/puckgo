@@ -8,6 +8,9 @@ type Config struct {
 	DefaultAction   bool
 	DefaultServer   string
 	ExceptiveServer string
+	ProxyListen     string
+	ProxyUpstream   string
+	ProxyTimeout    int
 }
 
 const (
@@ -18,5 +21,7 @@ const (
 	// ExceptiveServer DNS server for DNS outside China
 	ExceptiveServer = "8.8.8.8:53"
 	// DefaultListen listen address and port
-	DefaultListen = "0.0.0.0:53"
+	DefaultListen       = "0.0.0.0:53"
+	DefaultProxyListen  = ":1200"
+	DefaultProxyTimeout = 3000
 )
