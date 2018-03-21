@@ -32,3 +32,19 @@ func GetMatchActions(source string) (MatchActions, error) {
 	}
 	return make(MatchActions), nil
 }
+
+func Match(name string, ma MatchActions) (MatchAction, error) {
+	name = strings.TrimSuffix(name, ".")
+	var tokens []string
+	for {
+		if action, ok := ma[name]; ok {
+			return action, nil
+		}
+		tokens = strings.SplitN(name, ".", 2)
+		if len(tokens) == 1 {
+			break
+		}
+		name = tokens[1]
+	}
+	return Default, fmt.Errorf("not match")
+}

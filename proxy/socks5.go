@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"github.com/joycn/puckgo/conn"
+	"github.com/joycn/puckgo/datasource"
+	"github.com/joycn/puckgo/filter"
+	"github.com/joycn/puckgo/sni"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/http"
-	"os"
-	"socks5/conn"
-	"socks5/sni"
 	"strconv"
 	"sync"
 	"syscall"
@@ -18,13 +19,25 @@ import (
 	"unsafe"
 )
 
-var dialer proxy.Dialer
-var isProxy bool
+var (
+	dialer  proxy.Dialer
+	filters *filter.Filters
+)
 
-func StartProxy(listen, upstream string, timeout time.Duration) {
-	if len(os.Args) > 2 && os.Args[2] == "proxy" {
-		isProxy = true
-	}
+func createFilters(ma datasource.MatchActions) *filter.Filters {
+
+	filters := filter.NewFilters(ma)
+	httpFilter := filter.NewHTTPFilter()
+	filters.AddFilter(httpFilter)
+	httpsFilter := filter.NewHTTPSFilter()
+	filters.AddFilter(httpsFilter)
+	return filters
+}
+
+func StartProxy(ma datasource.MatchActions, listen, upstream string, timeout time.Duration) {
+
+	filters = createFilters(ma)
+
 	dialer, _ = proxy.SOCKS5("tcp", upstream, nil, proxy.Direct)
 	lnsa, err := net.ResolveTCPAddr("tcp", listen)
 	if err != nil {
@@ -50,14 +63,24 @@ func StartProxy(listen, upstream string, timeout time.Duration) {
 func handleConn(rawConn *net.TCPConn, d proxy.Dialer, timeout time.Duration) {
 
 	c := conn.NewIdleTimeoutConn(rawConn, timeout)
+	defer c.Close()
 
 	downstreamReader := bufio.NewReader(c)
 
+	action, buf, err := filters.ExecFilters(downstreamReader)
+
+	if err != nil {
+		// do something
+		fmt.Println(err)
+	}
+
+	if action != datasource.Except {
+		return
+	}
+
 	//c.SetDeadline(time.Now().Add(time.Duration(3) * time.Second))
 	target, err := getOriginalDst(rawConn)
-	if isProxy {
-		d = &net.Dialer{}
-	}
+
 	//sendConn, err := d.Dial("tcp", target)
 
 	sendConn, err := conn.DialUpstream(d, "tcp", target, timeout)
@@ -65,6 +88,10 @@ func handleConn(rawConn *net.TCPConn, d proxy.Dialer, timeout time.Duration) {
 	if err != nil {
 		fmt.Println(err)
 		return
+	}
+
+	if buf != nil {
+		buf.Write(sendConn)
 	}
 
 	defer sendConn.Close()
@@ -134,23 +161,6 @@ func copyData(dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
 	////}
 
 	//}
-}
-
-func isHTTPRequest(r *bufio.Reader) bool {
-
-	firstChar, err := r.Peek(1)
-
-	if err != nil {
-		return false
-	}
-
-	ch := firstChar[0]
-
-	if (ch < 'A' || ch > 'Z') && ch != '_' && ch != '-' {
-		return false
-	}
-
-	return true
 }
 
 func handleHTTP(r *bufio.Reader) (*http.Request, error) {

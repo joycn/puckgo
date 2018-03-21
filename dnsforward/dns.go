@@ -2,9 +2,8 @@ package dnsforward
 
 import (
 	"bufio"
-	"fmt"
 	"github.com/Sirupsen/logrus"
-	"github.com/joycn/dnsforward/datasource"
+	"github.com/joycn/puckgo/datasource"
 	"github.com/miekg/dns"
 	"net"
 	"os"
@@ -62,32 +61,16 @@ func readFromServer(r, s *net.UDPConn) {
 	}
 }
 
-func needProxied(name string, ma datasource.MatchActions) (datasource.MatchAction, error) {
-	name = strings.TrimSuffix(name, ".")
-	var tokens []string
-	for {
-		if proxied, ok := ma[name]; ok {
-			return proxied, nil
-		}
-		tokens = strings.SplitN(name, ".", 2)
-		if len(tokens) == 1 {
-			break
-		}
-		name = tokens[1]
-	}
-	return datasource.Default, fmt.Errorf("not match")
-}
-
 var onFlyMap map[uint16]*request
 var targetConn map[datasource.MatchAction]*net.UDPConn
 var m sync.Mutex
 
-func StartDNS(source, defaultServer, otherServer, listen string, missDrop bool) error {
-	ma, err := datasource.GetMatchActions(source)
-	if err != nil {
-		logrus.Error(err)
-		return err
-	}
+func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen string, missDrop bool) error {
+	//ma, err := datasource.GetMatchActions(source)
+	//if err != nil {
+	//logrus.Error(err)
+	//return err
+	//}
 	onFlyMap = make(map[uint16]*request)
 	targetConn = make(map[datasource.MatchAction]*net.UDPConn)
 	m = sync.Mutex{}
@@ -140,7 +123,7 @@ func StartDNS(source, defaultServer, otherServer, listen string, missDrop bool) 
 
 		if len(msg.Question) > 0 {
 			name := msg.Question[0].Name
-			need, err := needProxied(name, ma)
+			need, err := datasource.Match(name, ma)
 			if err != nil {
 				need = datasource.MatchAction(missDrop)
 			}
