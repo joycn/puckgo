@@ -7,21 +7,19 @@ import (
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
-	"github.com/joycn/puckgo/sni"
+	//"github.com/joycn/puckgo/sni"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
-	"net/http"
-	"strconv"
-	"sync"
+	//"net/http"
 	"syscall"
 	"time"
 	"unsafe"
 )
 
 var (
-	dialer  proxy.Dialer
-	filters *filter.Filters
+	proxyDialer proxy.Dialer
+	filters     *filter.Filters
 )
 
 func createFilters(ma datasource.MatchActions) *filter.Filters {
@@ -34,11 +32,12 @@ func createFilters(ma datasource.MatchActions) *filter.Filters {
 	return filters
 }
 
+// StartProxy start proxy to handle http and https
 func StartProxy(ma datasource.MatchActions, listen, upstream string, timeout time.Duration) {
 
 	filters = createFilters(ma)
+	proxyDialer, _ = proxy.SOCKS5("tcp", upstream, nil, proxy.Direct)
 
-	dialer, _ = proxy.SOCKS5("tcp", upstream, nil, proxy.Direct)
 	lnsa, err := net.ResolveTCPAddr("tcp", listen)
 	if err != nil {
 		panic(err)
@@ -56,34 +55,43 @@ func StartProxy(ma datasource.MatchActions, listen, upstream string, timeout tim
 			fmt.Printf("Error accepting connection: %v\n", err)
 			continue
 		}
-		go handleConn(conn, dialer, timeout)
+		go handleConn(conn, timeout)
 	}
 }
 
-func handleConn(rawConn *net.TCPConn, d proxy.Dialer, timeout time.Duration) {
+func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
+
+	var d proxy.Dialer
 
 	c := conn.NewIdleTimeoutConn(rawConn, timeout)
-	defer c.Close()
-
 	downstreamReader := bufio.NewReader(c)
 
-	action, buf, err := filters.ExecFilters(downstreamReader)
+	defer func() {
+		//downstreamReader.Reset(nil)
+		if err := c.Close(); err != nil {
+			fmt.Println("close failed", err)
+		}
+	}()
+
+	//c.SetLinger(0)
+
+	host, action, buf, err := filters.ExecFilters(downstreamReader)
 
 	if err != nil {
 		// do something
 		fmt.Println(err)
-	}
-
-	if action != datasource.Except {
 		return
 	}
 
-	//c.SetDeadline(time.Now().Add(time.Duration(3) * time.Second))
-	target, err := getOriginalDst(rawConn)
+	if action != datasource.Except {
+		d = proxy.Direct
+	} else {
+		d = proxyDialer
+	}
 
-	//sendConn, err := d.Dial("tcp", target)
+	_, port, err := getOriginalDst(rawConn)
 
-	sendConn, err := conn.DialUpstream(d, "tcp", target, timeout)
+	sendConn, err := conn.DialUpstream(d, "tcp", fmt.Sprintf("%s:%d", host, port), timeout)
 
 	if err != nil {
 		fmt.Println(err)
@@ -94,17 +102,12 @@ func handleConn(rawConn *net.TCPConn, d proxy.Dialer, timeout time.Duration) {
 		buf.Write(sendConn)
 	}
 
-	defer sendConn.Close()
+	defer sendConn.CloseWrite()
 
-	wg := &sync.WaitGroup{}
-
-	wg.Add(1)
-	go copyData(c, sendConn, wg)
+	go copyData(c, sendConn)
 
 	io.Copy(sendConn, downstreamReader)
-
-	wg.Wait()
-	fmt.Println("finished")
+	sendConn.CloseRead()
 }
 
 func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err error) {
@@ -116,73 +119,45 @@ func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err er
 }
 
 //func copyData(wg *sync.WaitGroup, conn1, conn2 net.Conn) {
-func copyData(dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	fmt.Println("copyData start", time.Now())
+func copyData(dst, src *conn.IdleTimeoutConn) {
+
+	defer dst.CloseWrite()
+	defer src.CloseRead()
 
 	r, w := io.Pipe()
-	defer func() {
-		fmt.Println("copyData finished", time.Now())
-		wg.Done()
-	}()
-
 	go func() {
 		defer w.Close()
 		if _, err := io.Copy(w, src); err != nil {
-			fmt.Println("src", err)
 			return
-		} else {
-			fmt.Println("src finished")
 		}
 	}()
 	defer r.Close()
 	if _, err := io.Copy(dst, r); err != nil {
-		fmt.Println("dst", err)
 		return
-	} else {
-		fmt.Println("dst finished")
 	}
-	//for {
-	////src.SetWriteDeadline(time.Now().Add(time.Second * 3))
-	////dst.SetReadDeadline(time.Now().Add(time.Second * 3))
-	//if n, err := src.Read(b); err != nil {
-	//fmt.Println("copy data", err, "write", n)
-	//break
-	//} else {
-	//dst.Write(b[:n])
-	//}
-	////if n, err := io.Copy(conn1, conn2); err != nil {
-	////if e := conn1.Close(); e != nil {
-	////fmt.Println("close failed", e)
-	////}
-	////fmt.Println("copy data", err, "write", n)
-	////break
-	////} else {
-	////fmt.Println("write", n)
-	////}
-
-	//}
 }
 
-func handleHTTP(r *bufio.Reader) (*http.Request, error) {
+//func handleHTTP(r *bufio.Reader) (*http.Request, error) {
 
-	fmt.Println("http", time.Now())
+//fmt.Println("http", time.Now())
 
-	req, err := http.ReadRequest(r)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
+//req, err := http.ReadRequest(r)
+//if err != nil {
+//fmt.Println(err)
+//return nil, err
+//}
 
-	fmt.Println(req.Host)
-	return req, nil
-}
+//fmt.Println(req.Host)
+//return req, nil
+//}
 
-func getOriginalDst(clientConn *net.TCPConn) (string, error) {
+func getOriginalDst(clientConn *net.TCPConn) (net.IP, uint16, error) {
 	clientConnFile, err := clientConn.File()
 	if err != nil {
 		fmt.Printf("File failed: %s", err.Error())
-		return "", err
+		return nil, 0, err
 	}
+	defer clientConnFile.Close()
 
 	//sa, err := syscall.GetsockoptInet4Addr(int(clientConnFile.Fd()), syscall.IPPROTO_IP, SO_ORIGINAL_DST)
 
@@ -192,25 +167,27 @@ func getOriginalDst(clientConn *net.TCPConn) (string, error) {
 	err = getsockopt(int(clientConnFile.Fd()), syscall.IPPROTO_IP, 80, uintptr(unsafe.Pointer(&sa)), &size)
 	if err != nil {
 		fmt.Printf("GETORIGINALDST failed: %s ", err.Error())
-		return "", err
+		return nil, 0, err
 	}
 
-	addr := net.IPv4(sa.Addr[0], sa.Addr[1], sa.Addr[2], sa.Addr[3]).String()
+	addr := net.IPv4(sa.Addr[0], sa.Addr[1], sa.Addr[2], sa.Addr[3])
 	nport := sa.Port
 	lport := binary.BigEndian.Uint16((*(*[2]byte)(unsafe.Pointer(&nport)))[:])
-	port := strconv.Itoa(int(lport))
+	port := uint16(lport)
 
-	return addr + ":" + port, nil
+	return addr, port, nil
+
+	//return addr + ":" + port, nil
 }
 
-func handleHTTPS(b *bufio.Reader) (io.Reader, error) {
+//func handleHTTPS(b *bufio.Reader) (io.Reader, error) {
 
-	fmt.Println("https", time.Now())
+//fmt.Println("https", time.Now())
 
-	_, err := sni.ReadServerName(b)
-	if err != nil {
-		return b, nil
-	} else {
-		return nil, err
-	}
-}
+//_, err := sni.ReadServerName(b)
+//if err != nil {
+//return b, nil
+//} else {
+//return nil, err
+//}
+//}

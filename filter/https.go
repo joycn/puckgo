@@ -229,9 +229,7 @@ func filterByTLSServerName(r *bufio.Reader) (string, FilterAction, Buffer, error
 			return "", Continue, nil, fmt.Errorf("inval format")
 		}
 
-		fmt.Println(typ)
 		msgLen := int(header[3])<<8 | int(header[4])
-		fmt.Println(msgLen)
 
 		if msgLen < 4 {
 			return "", Continue, nil, fmt.Errorf("msg length invalid")

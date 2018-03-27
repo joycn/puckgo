@@ -57,7 +57,11 @@ func readFromServer(r, s *net.UDPConn) {
 		if !ok {
 			continue
 		}
-		s.WriteTo(b[:n], rq.Remote)
+		msg = new(dns.Msg)
+		err = msg.Unpack(b[:n])
+		if err == nil {
+			s.WriteTo(b[:n], rq.Remote)
+		}
 	}
 }
 
@@ -122,10 +126,24 @@ func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen str
 		}
 
 		if len(msg.Question) > 0 {
-			name := msg.Question[0].Name
+			q := msg.Question[0]
+			name := q.Name
 			need, err := datasource.Match(name, ma)
 			if err != nil {
 				need = datasource.MatchAction(missDrop)
+			}
+
+			if need {
+				if q.Qtype == 1 && q.Qclass == 1 && !remote.IP.IsLoopback() {
+					msg.Response = true
+					a := &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: 1, Class: 1, Ttl: 3600}, A: net.IPv4(111, 111, 111, 111)}
+					msg.Answer = append(msg.Answer, a)
+					b, err := msg.Pack()
+					if err == nil {
+						conn.WriteTo(b, remote)
+						continue
+					}
+				}
 			}
 			m.Lock()
 			onFlyMap[msg.Id] = &request{

@@ -75,6 +75,6 @@ func filterByHTTPHost(r *bufio.Reader) (string, FilterAction, Buffer, error) {
 	if request, err := http.ReadRequest(r); err != nil {
 		return "", Stop, request, err
 	} else {
-		return request.Host, Stop, request, nil
+		return strings.SplitN(request.Host, ":", 2)[0], Stop, request, nil
 	}
 }

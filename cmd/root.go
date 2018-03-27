@@ -28,7 +28,7 @@ var cfg *config.Config = &config.Config{}
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "dnsforward",
+	Use:   "puckgo",
 	Short: "A brief description of your application",
 	Long: `A longer description that spans multiple lines and likely contains
 examples and usage of using your application. For example:
@@ -68,12 +68,8 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&cfg.ExceptiveServer, "except", config.ExceptiveServer, "exceptive dns server")
 	RootCmd.PersistentFlags().StringVar(&cfg.ProxyListen, "proxylisten", config.DefaultProxyListen, "listen address for proxy")
 	RootCmd.PersistentFlags().IntVar(&cfg.ProxyTimeout, "timeout", config.DefaultProxyTimeout, "default timeout for proxy connection")
-	RootCmd.PersistentFlags().StringVar(&cfg.ProxyUpstream, "upstream", "61.49.62.26:1200", "default timeout for proxy connection")
-	if err := RootCmd.MarkPersistentFlagRequired("upstream"); err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println("wtf")
-	}
+	RootCmd.PersistentFlags().StringVar(&cfg.ProxyUpstream, "upstream", "", "default timeout for proxy connection")
+	//RootCmd.MarkPersistentFlagRequired("upstream")
 	//RootCmd.PersistentFlags().Lookup("defaultdrop").NoOptDefVal = true
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -89,7 +85,6 @@ func initConfig() {
 	viper.SetConfigName(".puckgo") // name of config file (without extension)
 	viper.AddConfigPath("$HOME")   // adding home directory as first search path
 	viper.AutomaticEnv()           // read in environment variables that match
-	fmt.Println(cfg)
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
@@ -97,6 +92,13 @@ func initConfig() {
 		if err := viper.Unmarshal(cfg); err != nil {
 			fmt.Printf("%v\n", err)
 			os.Exit(-1)
+		} else {
+			fmt.Println(cfg)
 		}
+	}
+
+	if cfg.ProxyUpstream == "" {
+		fmt.Println("upstream not set")
+		os.Exit(-1)
 	}
 }

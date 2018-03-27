@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"fmt"
 	"net"
 	"time"
 )
@@ -11,18 +12,18 @@ type Dialer interface {
 }
 
 type IdleTimeoutConn struct {
-	net.Conn
+	*net.TCPConn
 	Timeout time.Duration
 }
 
 func (c *IdleTimeoutConn) Read(buf []byte) (int, error) {
-	c.SetDeadline(time.Now().Add(c.Timeout))
-	return c.Conn.Read(buf)
+	c.SetReadDeadline(time.Now().Add(c.Timeout))
+	return c.TCPConn.Read(buf)
 }
 
 func (c *IdleTimeoutConn) Write(buf []byte) (int, error) {
-	c.SetDeadline(time.Now().Add(c.Timeout))
-	return c.Conn.Write(buf)
+	c.SetWriteDeadline(time.Now().Add(c.Timeout))
+	return c.TCPConn.Write(buf)
 }
 
 func DialUpstream(dialer Dialer, network, target string, timeout time.Duration) (*IdleTimeoutConn, error) {
@@ -31,9 +32,14 @@ func DialUpstream(dialer Dialer, network, target string, timeout time.Duration) 
 		return nil, err
 	}
 
-	return &IdleTimeoutConn{c, timeout}, nil
+	if tcpConn, ok := c.(*net.TCPConn); !ok {
+		return nil, fmt.Errorf("not tcp conn")
+	} else {
+		return &IdleTimeoutConn{tcpConn, timeout}, nil
+	}
+
 }
 
-func NewIdleTimeoutConn(c net.Conn, timeout time.Duration) *IdleTimeoutConn {
+func NewIdleTimeoutConn(c *net.TCPConn, timeout time.Duration) *IdleTimeoutConn {
 	return &IdleTimeoutConn{c, timeout}
 }

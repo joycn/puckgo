@@ -55,7 +55,7 @@ func (filters *Filters) RemoveFilter(f *Filter) error {
 	return fmt.Errorf("filter not exist")
 }
 
-func (filters *Filters) ExecFilters(r *bufio.Reader) (datasource.MatchAction, Buffer, error) {
+func (filters *Filters) ExecFilters(r *bufio.Reader) (string, datasource.MatchAction, Buffer, error) {
 	var (
 		host   string
 		action FilterAction
@@ -79,10 +79,10 @@ func (filters *Filters) ExecFilters(r *bufio.Reader) (datasource.MatchAction, Bu
 	}
 
 	if err != nil {
-		return datasource.Default, buf, err
+		return host, datasource.Default, buf, err
 	}
 
 	matchAction, err := datasource.Match(host, filters.MatchActions)
 
-	return matchAction, buf, err
+	return host, matchAction, buf, err
 }
