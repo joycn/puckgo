@@ -15,16 +15,17 @@ const (
 	extensionServerName uint16     = 0
 )
 
+// ServerName get serverName from client hello packet
 func ServerName(data []byte) (string, bool) {
 	if len(data) < 42 {
 		return "", false
 	}
-	sessionIdLen := int(data[38])
-	if sessionIdLen > 32 || len(data) < 39+sessionIdLen {
+	sessionIDLen := int(data[38])
+	if sessionIDLen > 32 || len(data) < 39+sessionIDLen {
 		return "", false
 	}
-	//m.sessionId = data[39 : 39+sessionIdLen]
-	data = data[39+sessionIdLen:]
+	//m.sessionId = data[39 : 39+sessionIDLen]
+	data = data[39+sessionIDLen:]
 	if len(data) < 2 {
 		return "", false
 	}
@@ -211,7 +212,7 @@ func ServerName(data []byte) (string, bool) {
 	return "", false
 }
 
-func filterByTLSServerName(r *bufio.Reader) (string, FilterAction, Buffer, error) {
+func filterByTLSServerName(r *bufio.Reader) (string, Action, Buffer, error) {
 
 	header, err := r.Peek(recordHeaderLen)
 
@@ -260,6 +261,7 @@ func filterByTLSServerName(r *bufio.Reader) (string, FilterAction, Buffer, error
 	return "", Continue, nil, fmt.Errorf("not https")
 }
 
+// NewHTTPSFilter create a new http filter filter with http host header
 func NewHTTPSFilter() *Filter {
 	return &Filter{Name: "tls", Func: filterByTLSServerName}
 }

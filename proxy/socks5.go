@@ -22,7 +22,7 @@ var (
 	filters     *filter.Filters
 )
 
-func createFilters(ma datasource.MatchActions) *filter.Filters {
+func createFilters(ma *datasource.AccessList) *filter.Filters {
 
 	filters := filter.NewFilters(ma)
 	httpFilter := filter.NewHTTPFilter()
@@ -33,7 +33,7 @@ func createFilters(ma datasource.MatchActions) *filter.Filters {
 }
 
 // StartProxy start proxy to handle http and https
-func StartProxy(ma datasource.MatchActions, listen, upstream string, timeout time.Duration) {
+func StartProxy(ma *datasource.AccessList, listen, upstream string, timeout time.Duration) {
 
 	filters = createFilters(ma)
 	proxyDialer, _ = proxy.SOCKS5("tcp", upstream, nil, proxy.Direct)
@@ -61,7 +61,14 @@ func StartProxy(ma datasource.MatchActions, listen, upstream string, timeout tim
 
 func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 
-	var d proxy.Dialer
+	var (
+		needProxied bool
+		buf         filter.Buffer
+		host        string
+		port        uint16
+		d           proxy.Dialer
+		err         error
+	)
 
 	c := conn.NewIdleTimeoutConn(rawConn, timeout)
 	downstreamReader := bufio.NewReader(c)
@@ -75,21 +82,24 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 
 	//c.SetLinger(0)
 
-	host, action, buf, err := filters.ExecFilters(downstreamReader)
+	host, port, err = getOriginalDst(rawConn)
 
-	if err != nil {
-		// do something
-		fmt.Println(err)
-		return
+	needProxied = filters.CheckTargetIP(host)
+
+	if !needProxied {
+		host, needProxied, buf, err = filters.ExecFilters(downstreamReader)
+		if err != nil {
+			// do something
+			fmt.Println(err)
+			return
+		}
 	}
 
-	if action != datasource.Except {
-		d = proxy.Direct
-	} else {
+	if needProxied {
 		d = proxyDialer
+	} else {
+		d = proxy.Direct
 	}
-
-	_, port, err := getOriginalDst(rawConn)
 
 	sendConn, err := conn.DialUpstream(d, "tcp", fmt.Sprintf("%s:%d", host, port), timeout)
 
@@ -151,11 +161,11 @@ func copyData(dst, src *conn.IdleTimeoutConn) {
 //return req, nil
 //}
 
-func getOriginalDst(clientConn *net.TCPConn) (net.IP, uint16, error) {
+func getOriginalDst(clientConn *net.TCPConn) (string, uint16, error) {
 	clientConnFile, err := clientConn.File()
 	if err != nil {
 		fmt.Printf("File failed: %s", err.Error())
-		return nil, 0, err
+		return "", 0, err
 	}
 	defer clientConnFile.Close()
 
@@ -167,7 +177,7 @@ func getOriginalDst(clientConn *net.TCPConn) (net.IP, uint16, error) {
 	err = getsockopt(int(clientConnFile.Fd()), syscall.IPPROTO_IP, 80, uintptr(unsafe.Pointer(&sa)), &size)
 	if err != nil {
 		fmt.Printf("GETORIGINALDST failed: %s ", err.Error())
-		return nil, 0, err
+		return "", 0, err
 	}
 
 	addr := net.IPv4(sa.Addr[0], sa.Addr[1], sa.Addr[2], sa.Addr[3])
@@ -175,7 +185,7 @@ func getOriginalDst(clientConn *net.TCPConn) (net.IP, uint16, error) {
 	lport := binary.BigEndian.Uint16((*(*[2]byte)(unsafe.Pointer(&nport)))[:])
 	port := uint16(lport)
 
-	return addr, port, nil
+	return addr.String(), port, nil
 
 	//return addr + ":" + port, nil
 }

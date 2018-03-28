@@ -8,11 +8,13 @@ import (
 )
 
 const (
+	// LongestMehodLen max read len to fetch http method
 	LongestMehodLen = 9
 )
 
 var (
-	HTTPMethod map[string]bool = map[string]bool{
+	// HTTPMethod supprted http method
+	HTTPMethod = map[string]bool{
 		"GET":       true,
 		"PUT":       true,
 		"POST":      true,
@@ -31,6 +33,7 @@ var (
 	}
 )
 
+// NewHTTPFilter create a new http filter filter with http host header
 func NewHTTPFilter() *Filter {
 	return &Filter{Name: "http", Func: filterByHTTPHost}
 }
@@ -45,7 +48,7 @@ func parseRequestLine(line string) (method, requestURI, proto string, ok bool) {
 	return line[:s1], line[s1+1 : s2], line[s2+1:], true
 }
 
-func filterByHTTPHost(r *bufio.Reader) (string, FilterAction, Buffer, error) {
+func filterByHTTPHost(r *bufio.Reader) (string, Action, Buffer, error) {
 
 	firstChar, err := r.Peek(1)
 
@@ -72,9 +75,9 @@ func filterByHTTPHost(r *bufio.Reader) (string, FilterAction, Buffer, error) {
 		return "", Continue, nil, fmt.Errorf("not http")
 	}
 
-	if request, err := http.ReadRequest(r); err != nil {
+	var request *http.Request
+	if request, err = http.ReadRequest(r); err != nil {
 		return "", Stop, request, err
-	} else {
-		return strings.SplitN(request.Host, ":", 2)[0], Stop, request, nil
 	}
+	return strings.SplitN(request.Host, ":", 2)[0], Stop, request, nil
 }

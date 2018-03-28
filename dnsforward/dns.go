@@ -69,7 +69,8 @@ var onFlyMap map[uint16]*request
 var targetConn map[datasource.MatchAction]*net.UDPConn
 var m sync.Mutex
 
-func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen string, missDrop bool) error {
+// StartDNS start dns server to forward or answer dns query
+func StartDNS(ma datasource.DomainMap, defaultServer, otherServer, listen string, missDrop bool) error {
 	//ma, err := datasource.GetMatchActions(source)
 	//if err != nil {
 	//logrus.Error(err)
@@ -85,7 +86,7 @@ func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen str
 		logrus.Error(err)
 		return err
 	}
-	targetConn[datasource.Default] = defaultServerConn
+	//targetConn[datasource.Default] = defaultServerConn
 
 	exceptiveServerAddr, err := net.ResolveUDPAddr("udp", otherServer)
 	exceptiveServerConn, err := net.DialUDP("udp", nil, exceptiveServerAddr)
@@ -93,7 +94,7 @@ func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen str
 		logrus.Error(err)
 		return err
 	}
-	targetConn[datasource.Except] = exceptiveServerConn
+	//targetConn[datasource.Except] = exceptiveServerConn
 
 	addr, err := net.ResolveUDPAddr("udp", listen)
 	if err != nil {
@@ -107,9 +108,10 @@ func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen str
 		return err
 	}
 
-	for _, s := range targetConn {
-		go readFromServer(s, conn)
-	}
+	//for _, s := range targetConn {
+	go readFromServer(defaultServerConn, conn)
+	go readFromServer(exceptiveServerConn, conn)
+	//}
 
 	for {
 		b := make([]byte, 1500)
@@ -128,11 +130,7 @@ func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen str
 		if len(msg.Question) > 0 {
 			q := msg.Question[0]
 			name := q.Name
-			need, err := datasource.Match(name, ma)
-			if err != nil {
-				need = datasource.MatchAction(missDrop)
-			}
-
+			need := datasource.Match(name, ma)
 			if need {
 				if q.Qtype == 1 && q.Qclass == 1 && !remote.IP.IsLoopback() {
 					msg.Response = true
@@ -151,7 +149,12 @@ func StartDNS(ma datasource.MatchActions, defaultServer, otherServer, listen str
 				Remote: remote,
 			}
 			m.Unlock()
-			_, err = targetConn[need].Write(b[:n])
+
+			if need {
+				_, err = exceptiveServerConn.Write(b[:n])
+			} else {
+				_, err = defaultServerConn.Write(b[:n])
+			}
 			if err != nil {
 				logrus.Error(err)
 				continue

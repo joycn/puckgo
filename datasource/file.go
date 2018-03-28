@@ -1,29 +1,23 @@
 package datasource
 
 import (
-	"bufio"
-	"os"
-	"strings"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 )
 
-// MatchActionsFromFile get urlactions from path
-func MatchActionsFromFile(path string) (MatchActions, error) {
-	ret := make(MatchActions)
-	f, err := os.Open(path)
+// AccessListFromFile get urlactions from path
+func AccessListFromFile(path string) (*AccessList, error) {
+	info := new(accessListConfig)
+	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
-	reader := bufio.NewReader(f)
+	err = yaml.Unmarshal(bytes, info)
 
-	for {
-		url, err := reader.ReadString('\n')
-		url = strings.TrimSpace(url)
-		if err != nil {
-			break
-		}
-		ret[url] = Except
+	if err != nil {
+		return nil, err
 	}
-	return ret, nil
+
+	return newAccessList(info)
 }
