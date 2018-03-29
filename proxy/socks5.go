@@ -7,6 +7,7 @@ import (
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
+	"github.com/sirupsen/logrus"
 	//"github.com/joycn/puckgo/sni"
 	"golang.org/x/net/proxy"
 	"io"
@@ -52,7 +53,9 @@ func StartProxy(ma *datasource.AccessList, listen, upstream string, timeout time
 	for {
 		conn, err := listener.AcceptTCP()
 		if err != nil {
-			fmt.Printf("Error accepting connection: %v\n", err)
+			logrus.WithFields(logrus.Fields{
+				"error": err.Error(),
+			}).Error("accepting connection error")
 			continue
 		}
 		go handleConn(conn, timeout)
@@ -62,12 +65,13 @@ func StartProxy(ma *datasource.AccessList, listen, upstream string, timeout time
 func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 
 	var (
-		needProxied bool
-		buf         filter.Buffer
-		host        string
-		port        uint16
-		d           proxy.Dialer
-		err         error
+		needCloseConn = true
+		needProxied   bool
+		buf           filter.Buffer
+		host          string
+		port          uint16
+		d             proxy.Dialer
+		err           error
 	)
 
 	c := conn.NewIdleTimeoutConn(rawConn, timeout)
@@ -75,12 +79,17 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 
 	defer func() {
 		//downstreamReader.Reset(nil)
-		if err := c.Close(); err != nil {
-			fmt.Println("close failed", err)
+		if needCloseConn {
+			if err := c.Close(); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"error":  err.Error(),
+					"remote": c.RemoteAddr(),
+				}).Error("conn close failed")
+			}
 		}
 	}()
 
-	//c.SetLinger(0)
+	c.SetLinger(0)
 
 	host, port, err = getOriginalDst(rawConn)
 
@@ -90,7 +99,9 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 		host, needProxied, buf, err = filters.ExecFilters(downstreamReader)
 		if err != nil {
 			// do something
-			fmt.Println(err)
+			logrus.WithFields(logrus.Fields{
+				"error": err.Error(),
+			}).Error("exec filters failed")
 			return
 		}
 	}
@@ -101,23 +112,35 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 		d = proxy.Direct
 	}
 
-	sendConn, err := conn.DialUpstream(d, "tcp", fmt.Sprintf("%s:%d", host, port), timeout)
+	upstream := fmt.Sprintf("%s:%d", host, port)
+	sendConn, err := conn.DialUpstream(d, "tcp", upstream, timeout)
+
+	//sendConn.SetLinger(0)
 
 	if err != nil {
-		fmt.Println(err)
+		logrus.WithFields(logrus.Fields{
+			"error":    err.Error(),
+			"upstream": upstream,
+		}).Error("dial upstream failed")
 		return
 	}
 
-	if buf != nil {
-		buf.Write(sendConn)
-	}
-
-	defer sendConn.CloseWrite()
+	needCloseConn = false
 
 	go copyData(c, sendConn)
 
-	io.Copy(sendConn, downstreamReader)
-	sendConn.CloseRead()
+	defer c.CloseRead()
+	defer sendConn.CloseWrite()
+	if buf != nil {
+		buf.Write(sendConn)
+	}
+	if _, err := io.Copy(sendConn, downstreamReader); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error":      err.Error(),
+			"upstream":   upstream,
+			"downstream": c.RemoteAddr(),
+		}).Error("copy from downstream to upstream failed")
+	}
 }
 
 func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err error) {
@@ -131,19 +154,16 @@ func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err er
 //func copyData(wg *sync.WaitGroup, conn1, conn2 net.Conn) {
 func copyData(dst, src *conn.IdleTimeoutConn) {
 
-	defer dst.CloseWrite()
-	defer src.CloseRead()
-
-	r, w := io.Pipe()
-	go func() {
-		defer w.Close()
-		if _, err := io.Copy(w, src); err != nil {
-			return
-		}
+	defer func() {
+		dst.CloseWrite()
+		src.CloseRead()
 	}()
-	defer r.Close()
-	if _, err := io.Copy(dst, r); err != nil {
-		return
+	if _, err := io.Copy(dst, src); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error":      err.Error(),
+			"upstream":   src.RemoteAddr(),
+			"downstream": dst.RemoteAddr(),
+		}).Error("copy from upstream to downstream failed")
 	}
 }
 
@@ -164,7 +184,10 @@ func copyData(dst, src *conn.IdleTimeoutConn) {
 func getOriginalDst(clientConn *net.TCPConn) (string, uint16, error) {
 	clientConnFile, err := clientConn.File()
 	if err != nil {
-		fmt.Printf("File failed: %s", err.Error())
+		logrus.WithFields(logrus.Fields{
+			"error":      err.Error(),
+			"downstream": clientConn.RemoteAddr(),
+		}).Error("get origin dst")
 		return "", 0, err
 	}
 	defer clientConnFile.Close()
@@ -176,7 +199,10 @@ func getOriginalDst(clientConn *net.TCPConn) (string, uint16, error) {
 
 	err = getsockopt(int(clientConnFile.Fd()), syscall.IPPROTO_IP, 80, uintptr(unsafe.Pointer(&sa)), &size)
 	if err != nil {
-		fmt.Printf("GETORIGINALDST failed: %s ", err.Error())
+		logrus.WithFields(logrus.Fields{
+			"error":      err.Error(),
+			"downstream": clientConn.RemoteAddr(),
+		}).Error("get origin dst")
 		return "", 0, err
 	}
 

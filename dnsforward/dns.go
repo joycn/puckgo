@@ -2,9 +2,9 @@ package dnsforward
 
 import (
 	"bufio"
-	"github.com/Sirupsen/logrus"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/miekg/dns"
+	"github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"strings"

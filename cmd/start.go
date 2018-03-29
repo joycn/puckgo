@@ -1,17 +1,17 @@
 package cmd
 
 import (
-	//"github.com/Sirupsen/logrus"
 	"fmt"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/dnsforward"
 	"github.com/joycn/puckgo/proxy"
+	"github.com/sirupsen/logrus"
 	"time"
 )
 
 func start(cfg *config.Config) error {
-
+	logrus.SetFormatter(&logrus.TextFormatter{})
 	al, err := datasource.GetAccessList(cfg.DataSource)
 	if err != nil {
 		fmt.Println(err)
