@@ -17,7 +17,7 @@ func start(cfg *config.Config) error {
 		fmt.Println(err)
 		return err
 	}
-	go dnsforward.StartDNS(al.Domains, cfg.DefaultServer, cfg.ExceptiveServer, cfg.Listen, false)
+	go dnsforward.StartDNS(al, cfg.DefaultServer, cfg.ExceptiveServer, cfg.Listen, false)
 	timeout := time.Duration(time.Duration(cfg.ProxyTimeout) * time.Millisecond)
 	proxy.StartProxy(al, cfg.ProxyListen, cfg.ProxyUpstream, timeout)
 	return nil

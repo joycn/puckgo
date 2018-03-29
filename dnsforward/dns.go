@@ -70,7 +70,7 @@ var targetConn map[datasource.MatchAction]*net.UDPConn
 var m sync.Mutex
 
 // StartDNS start dns server to forward or answer dns query
-func StartDNS(ma datasource.DomainMap, defaultServer, otherServer, listen string, missDrop bool) error {
+func StartDNS(al *datasource.AccessList, defaultServer, otherServer, listen string, missDrop bool) error {
 	//ma, err := datasource.GetMatchActions(source)
 	//if err != nil {
 	//logrus.Error(err)
@@ -130,7 +130,7 @@ func StartDNS(ma datasource.DomainMap, defaultServer, otherServer, listen string
 		if len(msg.Question) > 0 {
 			q := msg.Question[0]
 			name := q.Name
-			need := datasource.Match(name, ma)
+			need := al.MatchDomain(name)
 			if need {
 				if q.Qtype == 1 && q.Qclass == 1 && !remote.IP.IsLoopback() {
 					msg.Response = true

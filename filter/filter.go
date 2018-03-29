@@ -70,12 +70,8 @@ func (filters *Filters) RemoveFilter(f *Filter) error {
 // CheckTargetIP check dst ip need to proxied
 func (filters *Filters) CheckTargetIP(target string) bool {
 	ip := net.ParseIP(target)
-	for _, subnet := range filters.al.Subnets {
-		if subnet.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	al := filters.al
+	return al.MatchIP(ip)
 }
 
 // ExecFilters exec all filter to check request
@@ -106,7 +102,8 @@ func (filters *Filters) ExecFilters(r *bufio.Reader) (string, bool, Buffer, erro
 		return host, false, buf, err
 	}
 
-	matchAction := datasource.Match(host, filters.al.Domains)
+	al := filters.al
+	match := al.MatchDomain(host)
 
-	return host, matchAction, buf, err
+	return host, match, buf, err
 }
