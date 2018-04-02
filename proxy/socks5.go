@@ -3,16 +3,15 @@ package proxy
 import (
 	"bufio"
 	"encoding/binary"
-	"fmt"
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
 	"github.com/sirupsen/logrus"
 	//"github.com/joycn/puckgo/sni"
+	"fmt"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
-	//"net/http"
 	"syscall"
 	"time"
 	"unsafe"
@@ -34,10 +33,14 @@ func createFilters(ma *datasource.AccessList) *filter.Filters {
 }
 
 // StartProxy start proxy to handle http and https
-func StartProxy(ma *datasource.AccessList, listen, upstream string, timeout time.Duration) {
+func StartProxy(ma *datasource.AccessList, listen, upstream string, timeout time.Duration, security bool) {
 
 	filters = createFilters(ma)
-	proxyDialer, _ = proxy.SOCKS5("tcp", upstream, nil, proxy.Direct)
+	if security {
+		proxyDialer, _ = proxy.SOCKS5("tcp", upstream, nil, conn.TLSDialer)
+	} else {
+		proxyDialer, _ = proxy.SOCKS5("tcp", upstream, nil, proxy.Direct)
+	}
 
 	lnsa, err := net.ResolveTCPAddr("tcp", listen)
 	if err != nil {
@@ -89,7 +92,7 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 		}
 	}()
 
-	c.SetLinger(0)
+	//c.SetLinger(0)
 
 	host, port, err = getOriginalDst(rawConn)
 
@@ -129,7 +132,7 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 
 	go copyData(c, sendConn)
 
-	defer c.CloseRead()
+	//defer c.CloseRead()
 	defer sendConn.CloseWrite()
 	if buf != nil {
 		buf.Write(sendConn)
@@ -156,7 +159,7 @@ func copyData(dst, src *conn.IdleTimeoutConn) {
 
 	defer func() {
 		dst.CloseWrite()
-		src.CloseRead()
+		//src.CloseRead()
 	}()
 	if _, err := io.Copy(dst, src); err != nil {
 		logrus.WithFields(logrus.Fields{

@@ -12,22 +12,28 @@ type Dialer interface {
 	Dial(network, addr string) (c net.Conn, err error)
 }
 
+// StreamConn net.Conn plus CloseWrite for tcp and tls conn
+type StreamConn interface {
+	net.Conn
+	CloseWrite() error
+}
+
 // IdleTimeoutConn is a tcp conn and reset deadline every read and write
 type IdleTimeoutConn struct {
-	*net.TCPConn
+	StreamConn
 	Timeout time.Duration
 }
 
 // Read set deadline before every read
 func (c *IdleTimeoutConn) Read(buf []byte) (int, error) {
 	c.SetDeadline(time.Now().Add(c.Timeout))
-	return c.TCPConn.Read(buf)
+	return c.StreamConn.Read(buf)
 }
 
 // Write set deadline before every write
 func (c *IdleTimeoutConn) Write(buf []byte) (int, error) {
 	c.SetDeadline(time.Now().Add(c.Timeout))
-	return c.TCPConn.Write(buf)
+	return c.StreamConn.Write(buf)
 }
 
 // DialUpstream dial upstream with dialer and return an IdleTimeoutConn
@@ -37,16 +43,18 @@ func DialUpstream(dialer Dialer, network, target string, timeout time.Duration) 
 		return nil, err
 	}
 
-	var tcpConn *net.TCPConn
+	var streamConn StreamConn
 	var ok bool
-	if tcpConn, ok = c.(*net.TCPConn); !ok {
-		return nil, fmt.Errorf("not tcp conn")
+
+	if streamConn, ok = c.(StreamConn); !ok {
+		return nil, fmt.Errorf("not stream conn")
 	}
-	return &IdleTimeoutConn{tcpConn, timeout}, nil
+
+	return &IdleTimeoutConn{streamConn, timeout}, nil
 
 }
 
 // NewIdleTimeoutConn create a new IdleTimeoutConn with timeout
-func NewIdleTimeoutConn(c *net.TCPConn, timeout time.Duration) *IdleTimeoutConn {
+func NewIdleTimeoutConn(c StreamConn, timeout time.Duration) *IdleTimeoutConn {
 	return &IdleTimeoutConn{c, timeout}
 }
