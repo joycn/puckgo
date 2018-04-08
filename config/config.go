@@ -4,13 +4,30 @@ package config
 type Config struct {
 	LogLevel         string
 	DataSource       string
-	Listen           string
-	DefaultAction    bool
-	DefaultServer    string
-	ExceptiveServer  string
+	DNS              DNSConfig
+	TransparentProxy TransparentProxyConfig
+	Socks5Proxy      Socks5ProxyConfig
+}
+
+// DNSConfig dns config params for dns server
+type DNSConfig struct {
+	Listen          string
+	DefaultAction   bool
+	DefaultServer   string
+	ExceptiveServer string
+}
+
+// TransparentProxyConfig config params for transparent proxy
+type TransparentProxyConfig struct {
 	ProxyListen      string
 	ProxyUpstream    string
 	ProxyTimeout     int
+	SecurityUpstream bool
+}
+
+// Socks5ProxyConfig config params for socks5 proxy
+type Socks5ProxyConfig struct {
+	Socks5Listen     string
 	SecurityUpstream bool
 }
 
@@ -27,4 +44,6 @@ const (
 	DefaultProxyListen = ":1200"
 	// DefaultProxyTimeout conn timeout for upstream
 	DefaultProxyTimeout = 3000
+	// DefaultSocks5Listen default address listen for socks5 proxy
+	DefaultSocks5Listen = ":1080"
 )

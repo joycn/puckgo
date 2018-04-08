@@ -2,6 +2,7 @@ package dnsforward
 
 import (
 	"bufio"
+	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
@@ -70,7 +71,7 @@ var targetConn map[datasource.MatchAction]*net.UDPConn
 var m sync.Mutex
 
 // StartDNS start dns server to forward or answer dns query
-func StartDNS(al *datasource.AccessList, defaultServer, otherServer, listen string, missDrop bool) error {
+func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
 	//ma, err := datasource.GetMatchActions(source)
 	//if err != nil {
 	//logrus.Error(err)
@@ -80,7 +81,7 @@ func StartDNS(al *datasource.AccessList, defaultServer, otherServer, listen stri
 	targetConn = make(map[datasource.MatchAction]*net.UDPConn)
 	m = sync.Mutex{}
 
-	defaultServerAddr, err := net.ResolveUDPAddr("udp", defaultServer)
+	defaultServerAddr, err := net.ResolveUDPAddr("udp", dnsConfig.DefaultServer)
 	defaultServerConn, err := net.DialUDP("udp", nil, defaultServerAddr)
 	if err != nil {
 		logrus.Error(err)
@@ -88,7 +89,7 @@ func StartDNS(al *datasource.AccessList, defaultServer, otherServer, listen stri
 	}
 	//targetConn[datasource.Default] = defaultServerConn
 
-	exceptiveServerAddr, err := net.ResolveUDPAddr("udp", otherServer)
+	exceptiveServerAddr, err := net.ResolveUDPAddr("udp", dnsConfig.ExceptiveServer)
 	exceptiveServerConn, err := net.DialUDP("udp", nil, exceptiveServerAddr)
 	if err != nil {
 		logrus.Error(err)
@@ -96,7 +97,7 @@ func StartDNS(al *datasource.AccessList, defaultServer, otherServer, listen stri
 	}
 	//targetConn[datasource.Except] = exceptiveServerConn
 
-	addr, err := net.ResolveUDPAddr("udp", listen)
+	addr, err := net.ResolveUDPAddr("udp", dnsConfig.Listen)
 	if err != nil {
 		logrus.Error(err)
 		return err

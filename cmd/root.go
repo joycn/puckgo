@@ -60,15 +60,15 @@ func init() {
 	// will be global for your application.
 
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.dnsforward.yaml)")
-	RootCmd.PersistentFlags().StringVar(&cfg.LogLevel, "loglevel", "info", "set log level")
-	RootCmd.PersistentFlags().StringVar(&cfg.DataSource, "data", config.DefaultDataSource, "data source used for url query")
-	RootCmd.PersistentFlags().BoolVar(&cfg.DefaultAction, "defaultdrop", false, "data source used for url query")
-	RootCmd.PersistentFlags().StringVar(&cfg.DefaultServer, "default", config.DefaultServer, "default dns server")
-	RootCmd.PersistentFlags().StringVar(&cfg.Listen, "listen", config.DefaultListen, "default dns server")
-	RootCmd.PersistentFlags().StringVar(&cfg.ExceptiveServer, "except", config.ExceptiveServer, "exceptive dns server")
-	RootCmd.PersistentFlags().StringVar(&cfg.ProxyListen, "proxylisten", config.DefaultProxyListen, "listen address for proxy")
-	RootCmd.PersistentFlags().IntVar(&cfg.ProxyTimeout, "timeout", config.DefaultProxyTimeout, "default timeout for proxy connection")
-	RootCmd.PersistentFlags().StringVar(&cfg.ProxyUpstream, "upstream", "", "default timeout for proxy connection")
+	//RootCmd.PersistentFlags().StringVar(&cfg.LogLevel, "loglevel", "info", "set log level")
+	//RootCmd.PersistentFlags().StringVar(&cfg.DataSource, "data", config.DefaultDataSource, "data source used for url query")
+	//RootCmd.PersistentFlags().BoolVar(&cfg.DNS.DefaultAction, "defaultdrop", false, "data source used for url query")
+	//RootCmd.PersistentFlags().StringVar(&cfg.DNS.DefaultServer, "default", config.DefaultServer, "default dns server")
+	//RootCmd.PersistentFlags().StringVar(&cfg.DNS.Listen, "listen", config.DefaultListen, "default dns server")
+	//RootCmd.PersistentFlags().StringVar(&cfg.DNS.ExceptiveServer, "except", config.ExceptiveServer, "exceptive dns server")
+	//RootCmd.PersistentFlags().StringVar(&cfg.TransparentProxy.ProxyListen, "proxylisten", config.DefaultProxyListen, "listen address for proxy")
+	//RootCmd.PersistentFlags().IntVar(&cfg.TransparentProxy.ProxyTimeout, "timeout", config.DefaultProxyTimeout, "default timeout for proxy connection")
+	//RootCmd.PersistentFlags().StringVar(&cfg.TransparentProxy.ProxyUpstream, "upstream", "", "default timeout for proxy connection")
 	//RootCmd.MarkPersistentFlagRequired("upstream")
 	//RootCmd.PersistentFlags().Lookup("defaultdrop").NoOptDefVal = true
 	// Cobra also supports local flags, which will only run
@@ -95,9 +95,18 @@ func initConfig() {
 		} else {
 			fmt.Println(cfg)
 		}
+	} else {
+		fmt.Printf("%v\n", err)
+		os.Exit(-1)
+
 	}
 
-	if cfg.ProxyUpstream == "" {
+	//if cfg.DNS.DefaultServer == "" {
+	//fmt.Println("upstream not set")
+	//os.Exit(-1)
+	//}
+
+	if cfg.TransparentProxy.ProxyUpstream == "" {
 		fmt.Println("upstream not set")
 		os.Exit(-1)
 	}
