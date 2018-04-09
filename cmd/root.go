@@ -60,6 +60,7 @@ func init() {
 	// will be global for your application.
 
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.dnsforward.yaml)")
+	RootCmd.PersistentFlags().BoolVar(&config.PublicService, "public", false, "whether run in public service mode")
 	//RootCmd.PersistentFlags().StringVar(&cfg.LogLevel, "loglevel", "info", "set log level")
 	//RootCmd.PersistentFlags().StringVar(&cfg.DataSource, "data", config.DefaultDataSource, "data source used for url query")
 	//RootCmd.PersistentFlags().BoolVar(&cfg.DNS.DefaultAction, "defaultdrop", false, "data source used for url query")

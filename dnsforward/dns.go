@@ -71,7 +71,7 @@ var targetConn map[datasource.MatchAction]*net.UDPConn
 var m sync.Mutex
 
 // StartDNS start dns server to forward or answer dns query
-func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
+func StartDNS(al *datasource.AccessList, proxyMatch bool, dnsConfig *config.DNSConfig) error {
 	//ma, err := datasource.GetMatchActions(source)
 	//if err != nil {
 	//logrus.Error(err)
@@ -131,8 +131,8 @@ func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
 		if len(msg.Question) > 0 {
 			q := msg.Question[0]
 			name := q.Name
-			need := al.MatchDomain(name)
-			if need {
+			matched := al.MatchDomain(name)
+			if matched == proxyMatch && !config.PublicService {
 				if q.Qtype == 1 && q.Qclass == 1 && !remote.IP.IsLoopback() {
 					msg.Response = true
 					a := &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: 1, Class: 1, Ttl: 3600}, A: net.IPv4(111, 111, 111, 111)}
@@ -151,7 +151,7 @@ func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
 			}
 			m.Unlock()
 
-			if need {
+			if matched {
 				_, err = exceptiveServerConn.Write(b[:n])
 			} else {
 				_, err = defaultServerConn.Write(b[:n])

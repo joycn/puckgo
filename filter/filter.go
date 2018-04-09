@@ -75,7 +75,7 @@ func (filters *Filters) CheckTargetIP(target string) bool {
 }
 
 // ExecFilters exec all filter to check request
-func (filters *Filters) ExecFilters(r *bufio.Reader) (string, bool, Buffer, error) {
+func (filters *Filters) ExecFilters(r *bufio.Reader) (string, Buffer, error) {
 	var (
 		host   string
 		action Action
@@ -97,13 +97,16 @@ func (filters *Filters) ExecFilters(r *bufio.Reader) (string, bool, Buffer, erro
 			break
 		}
 	}
+	return host, buf, err
+}
 
-	if err != nil {
-		return host, false, buf, err
-	}
-
+// Match check host whether should be proxied
+func (filters *Filters) Match(host string) bool {
+	ip := net.ParseIP(host)
 	al := filters.al
-	match := al.MatchDomain(host)
+	if ip != nil {
+		return al.MatchIP(ip)
+	}
+	return al.MatchDomain(host)
 
-	return host, match, buf, err
 }

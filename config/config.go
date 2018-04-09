@@ -1,9 +1,13 @@
 package config
 
+// PublicService whether run as a public service mode or a local gw mode
+var PublicService bool
+
 // Config params for dnsforward
 type Config struct {
 	LogLevel         string
 	DataSource       string
+	ProxyMatch       bool
 	DNS              DNSConfig
 	TransparentProxy TransparentProxyConfig
 	Socks5Proxy      Socks5ProxyConfig
@@ -12,7 +16,6 @@ type Config struct {
 // DNSConfig dns config params for dns server
 type DNSConfig struct {
 	Listen          string
-	DefaultAction   bool
 	DefaultServer   string
 	ExceptiveServer string
 }
