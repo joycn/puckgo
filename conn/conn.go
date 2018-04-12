@@ -26,13 +26,17 @@ type IdleTimeoutConn struct {
 
 // Read set deadline before every read
 func (c *IdleTimeoutConn) Read(buf []byte) (int, error) {
-	c.SetDeadline(time.Now().Add(c.Timeout))
+	if c.Timeout != 0 {
+		c.SetDeadline(time.Now().Add(c.Timeout))
+	}
 	return c.StreamConn.Read(buf)
 }
 
 // Write set deadline before every write
 func (c *IdleTimeoutConn) Write(buf []byte) (int, error) {
-	c.SetDeadline(time.Now().Add(c.Timeout))
+	if c.Timeout != 0 {
+		c.SetDeadline(time.Now().Add(c.Timeout))
+	}
 	return c.StreamConn.Write(buf)
 }
 
