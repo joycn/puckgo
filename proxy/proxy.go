@@ -8,6 +8,7 @@ import (
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
 	"github.com/sirupsen/logrus"
+	"sync"
 	//"github.com/joycn/puckgo/sni"
 	"fmt"
 	"golang.org/x/net/proxy"
@@ -74,28 +75,30 @@ func StartProxy(ma *datasource.AccessList, proxyMatch bool, tranparentProxyConfi
 func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 
 	var (
-		needCloseConn = true
-		buf           filter.Buffer
-		host          string
-		port          uint16
-		d             proxy.Dialer
-		err           error
+		wg   = &sync.WaitGroup{}
+		buf  filter.Buffer
+		host string
+		port uint16
+		d    proxy.Dialer
+		err  error
 	)
 
 	c := conn.NewIdleTimeoutConn(rawConn, timeout)
 	downstreamReader := bufio.NewReader(c)
 
-	defer func() {
-		//downstreamReader.Reset(nil)
-		if needCloseConn {
-			if err := c.Close(); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"error":  err.Error(),
-					"remote": c.RemoteAddr(),
-				}).Error("conn close failed")
-			}
-		}
-	}()
+	defer c.Close()
+
+	//defer func() {
+	////downstreamReader.Reset(nil)
+	//if needCloseConn {
+	//if err := c.Close(); err != nil {
+	//logrus.WithFields(logrus.Fields{
+	//"error":  err.Error(),
+	//"remote": c.RemoteAddr(),
+	//}).Error("conn close failed")
+	//}
+	//}
+	//}()
 
 	//c.SetLinger(0)
 	if config.PublicService {
@@ -146,12 +149,12 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 		return
 	}
 
-	needCloseConn = false
+	wg.Add(1)
 
-	go copyData(c, sendConn)
+	go copyData(wg, c, sendConn)
 
 	//defer c.CloseRead()
-	defer sendConn.CloseWrite()
+	defer sendConn.Close()
 	if buf != nil {
 		buf.Write(sendConn)
 	}
@@ -162,6 +165,10 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 			"downstream": c.RemoteAddr(),
 		}).Error("copy from downstream to upstream failed")
 	}
+
+	sendConn.CloseWrite()
+
+	wg.Wait()
 }
 
 func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err error) {
@@ -172,13 +179,10 @@ func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err er
 	return
 }
 
-//func copyData(wg *sync.WaitGroup, conn1, conn2 net.Conn) {
-func copyData(dst, src *conn.IdleTimeoutConn) {
+func copyData(wg *sync.WaitGroup, dst, src *conn.IdleTimeoutConn) {
 
-	defer func() {
-		dst.CloseWrite()
-		//src.CloseRead()
-	}()
+	defer wg.Done()
+
 	if _, err := io.Copy(dst, src); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error":      err.Error(),
@@ -186,6 +190,7 @@ func copyData(dst, src *conn.IdleTimeoutConn) {
 			"downstream": dst.RemoteAddr(),
 		}).Error("copy from upstream to downstream failed")
 	}
+	dst.CloseWrite()
 }
 
 //func handleHTTP(r *bufio.Reader) (*http.Request, error) {
