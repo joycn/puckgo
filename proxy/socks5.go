@@ -3,8 +3,11 @@ package proxy
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"golang.org/x/net/proxy"
 	"io"
 	"net"
+	"strconv"
 )
 
 var (
@@ -20,6 +23,176 @@ const (
 	socksVer5       = 5
 	socksCmdConnect = 1
 )
+
+// Command socks connect commnad
+type Command struct {
+	Request []byte
+}
+
+func (c *Command) Write(w io.Writer) error {
+	n, err := w.Write(c.Request)
+	if err != nil {
+		return err
+	}
+
+	if n != len(c.Request) {
+		return fmt.Errorf("Incomplete Write")
+	}
+	return nil
+}
+
+// PuckSocks simplified socks5 client with only connect method and no version or auth message
+func PuckSocks(network, addr string, auth *proxy.Auth, forward proxy.Dialer) (*puckSocks, error) {
+	s := &puckSocks{
+		network: network,
+		addr:    addr,
+		forward: forward,
+	}
+
+	return s, nil
+}
+
+type puckSocks struct {
+	network, addr string
+	forward       proxy.Dialer
+}
+
+const socks5Version = 5
+
+const (
+	socks5AuthNone     = 0
+	socks5AuthPassword = 2
+)
+
+const socks5Connect = 1
+
+const (
+	socks5IP4    = 1
+	socks5Domain = 3
+	socks5IP6    = 4
+)
+
+var socks5Errors = []string{
+	"",
+	"general failure",
+	"connection forbidden",
+	"network unreachable",
+	"host unreachable",
+	"connection refused",
+	"TTL expired",
+	"command not supported",
+	"address type not supported",
+}
+
+// Dial connects to the address addr on the network net via the SOCKS5 proxy.
+func (s *puckSocks) Dial(network, addr string) (net.Conn, error) {
+	switch network {
+	case "tcp", "tcp6", "tcp4":
+	default:
+		return nil, errors.New("proxy: no support for SOCKS5 proxy connections of type " + network)
+	}
+
+	conn, err := s.forward.Dial(s.network, s.addr)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.connect(conn, addr); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
+// connect takes an existing connection to a socks5 proxy server,
+// and commands the server to extend that connection to target,
+// which must be a canonical address with a host and port.
+func (s *puckSocks) connect(conn net.Conn, target string) error {
+	var buf []byte
+	host, portStr, err := net.SplitHostPort(target)
+	if err != nil {
+		return err
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return errors.New("proxy: failed to parse port number: " + portStr)
+	}
+	if port < 1 || port > 0xffff {
+		return errors.New("proxy: port number out of range: " + portStr)
+	}
+
+	// the size here is just an estimate
+	buf = make([]byte, 0)
+
+	buf = append(buf, socks5Version, socks5Connect, 0 /* reserved */)
+
+	if ip := net.ParseIP(host); ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			buf = append(buf, socks5IP4)
+			ip = ip4
+		} else {
+			buf = append(buf, socks5IP6)
+		}
+		buf = append(buf, ip...)
+	} else {
+		if len(host) > 255 {
+			return errors.New("proxy: destination host name too long: " + host)
+		}
+		buf = append(buf, socks5Domain)
+		buf = append(buf, byte(len(host)))
+		buf = append(buf, host...)
+	}
+	buf = append(buf, byte(port>>8), byte(port))
+
+	if _, err := conn.Write(buf); err != nil {
+		return errors.New("proxy: failed to write connect request to SOCKS5 proxy at " + s.addr + ": " + err.Error())
+	}
+
+	//if _, err := io.ReadFull(conn, buf[:4]); err != nil {
+	//return errors.New("proxy: failed to read connect reply from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+	//}
+
+	//failure := "unknown error"
+	//if int(buf[1]) < len(socks5Errors) {
+	//failure = socks5Errors[buf[1]]
+	//}
+
+	//if len(failure) > 0 {
+	//return errors.New("proxy: SOCKS5 proxy at " + s.addr + " failed to connect: " + failure)
+	//}
+
+	//bytesToDiscard := 0
+	//switch buf[3] {
+	//case socks5IP4:
+	//bytesToDiscard = net.IPv4len
+	//case socks5IP6:
+	//bytesToDiscard = net.IPv6len
+	//case socks5Domain:
+	//_, err := io.ReadFull(conn, buf[:1])
+	//if err != nil {
+	//return errors.New("proxy: failed to read domain length from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+	//}
+	//bytesToDiscard = int(buf[0])
+	//default:
+	//return errors.New("proxy: got unknown address type " + strconv.Itoa(int(buf[3])) + " from SOCKS5 proxy at " + s.addr)
+	//}
+
+	//if cap(buf) < bytesToDiscard {
+	//buf = make([]byte, bytesToDiscard)
+	//} else {
+	//buf = buf[:bytesToDiscard]
+	//}
+	//if _, err := io.ReadFull(conn, buf); err != nil {
+	//return errors.New("proxy: failed to read address from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+	//}
+
+	//// Also need to discard the port number
+	//if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+	//return errors.New("proxy: failed to read port from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+	//}
+
+	return nil
+}
 
 func handShake(conn net.Conn) (err error) {
 	const (
@@ -124,8 +297,7 @@ func getRequest(conn net.Conn) (host string, port uint16, err error) {
 		host = string(buf[idDm0 : idDm0+buf[idDmLen]])
 	}
 	port = binary.BigEndian.Uint16(buf[reqLen-2 : reqLen])
-
-	return
+	return host, port, nil
 }
 
 // HandleSocks5Request handle a socks5 client request

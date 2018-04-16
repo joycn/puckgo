@@ -39,9 +39,9 @@ func StartProxy(ma *datasource.AccessList, proxyMatch bool, tranparentProxyConfi
 	timeout := time.Duration(time.Duration(tranparentProxyConfig.ProxyTimeout) * time.Millisecond)
 	filters = createFilters(ma)
 	if tranparentProxyConfig.SecurityUpstream {
-		proxyDialer, _ = proxy.SOCKS5("tcp", tranparentProxyConfig.ProxyUpstream, auth, conn.TLSDialer)
+		proxyDialer, _ = PuckSocks("tcp", tranparentProxyConfig.ProxyUpstream, auth, conn.TLSDialer)
 	} else {
-		proxyDialer, _ = proxy.SOCKS5("tcp", tranparentProxyConfig.ProxyUpstream, auth, proxy.Direct)
+		proxyDialer, _ = PuckSocks("tcp", tranparentProxyConfig.ProxyUpstream, auth, proxy.Direct)
 	}
 
 	lnsa, err := net.ResolveTCPAddr("tcp", tranparentProxyConfig.ProxyListen)
@@ -111,15 +111,19 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 		host, port, err = getOriginalDst(rawConn)
 
 		if err != nil {
-		} else {
-			host, buf, err = filters.ExecFilters(downstreamReader)
-			if err != nil {
-				// do something
-				logrus.WithFields(logrus.Fields{
-					"error": err.Error(),
-				}).Error("exec filters failed")
-				return
-			}
+			logrus.WithFields(logrus.Fields{
+				"error": err.Error(),
+			}).Error("get origin dst failed")
+			return
+		}
+		host, buf, err = filters.ExecFilters(downstreamReader)
+		if err != nil {
+			// do something
+			logrus.WithFields(logrus.Fields{
+				"error": err.Error(),
+				"dport": port,
+			}).Error("exec filters failed")
+			return
 		}
 	}
 	matched := filters.Match(host)
