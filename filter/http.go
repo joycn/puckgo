@@ -48,36 +48,36 @@ func parseRequestLine(line string) (method, requestURI, proto string, ok bool) {
 	return line[:s1], line[s1+1 : s2], line[s2+1:], true
 }
 
-func filterByHTTPHost(r *bufio.Reader) (string, Action, Buffer, error) {
+func filterByHTTPHost(r *bufio.Reader) (string, Buffer, error) {
 
 	firstChar, err := r.Peek(1)
 
 	if err != nil {
-		return "", Again, nil, err
+		return "", nil, err
 	}
 
 	ch := firstChar[0]
 
 	if (ch < 'A' || ch > 'Z') && ch != '_' && ch != '-' {
-		return "", Continue, nil, fmt.Errorf("not http")
+		return "", nil, fmt.Errorf("not http")
 	}
 
 	prefix, err := r.Peek(LongestMehodLen + 1)
 	if err != nil {
-		return "", Again, nil, err
+		return "", nil, err
 	}
 
 	methods := strings.SplitN(string(prefix), " ", 2)
 
 	if len(methods) < 2 {
-		return "", Continue, nil, fmt.Errorf("not http")
+		return "", nil, fmt.Errorf("not http")
 	} else if _, ok := HTTPMethod[methods[0]]; !ok {
-		return "", Continue, nil, fmt.Errorf("not http")
+		return "", nil, fmt.Errorf("not http")
 	}
 
 	var request *http.Request
 	if request, err = http.ReadRequest(r); err != nil {
-		return "", Stop, request, err
+		return "", request, err
 	}
-	return strings.SplitN(request.Host, ":", 2)[0], Stop, request, nil
+	return strings.SplitN(request.Host, ":", 2)[0], request, nil
 }

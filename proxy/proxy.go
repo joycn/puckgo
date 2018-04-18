@@ -28,9 +28,9 @@ func createFilters(ma *datasource.AccessList) *filter.Filters {
 
 	filters := filter.NewFilters(ma)
 	httpFilter := filter.NewHTTPFilter()
-	filters.AddFilter(httpFilter)
+	filters.AddFilter(httpFilter, uint16(80))
 	httpsFilter := filter.NewHTTPSFilter()
-	filters.AddFilter(httpsFilter)
+	filters.AddFilter(httpsFilter, uint16(443))
 	return filters
 }
 
@@ -119,7 +119,7 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 			}).Error("get origin dst failed")
 			return
 		}
-		host, buf, err = filters.ExecFilters(downstreamReader)
+		host, buf, err = filters.ExecFilters(downstreamReader, port)
 		if err != nil {
 			// do something
 			logrus.WithFields(logrus.Fields{

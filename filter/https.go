@@ -212,12 +212,12 @@ func ServerName(data []byte) (string, bool) {
 	return "", false
 }
 
-func filterByTLSServerName(r *bufio.Reader) (string, Action, Buffer, error) {
+func filterByTLSServerName(r *bufio.Reader) (string, Buffer, error) {
 
 	header, err := r.Peek(recordHeaderLen)
 
 	if err != nil {
-		return "", Again, nil, err
+		return "", nil, err
 	}
 	typ := recordType(header[0])
 	switch typ {
@@ -227,18 +227,18 @@ func filterByTLSServerName(r *bufio.Reader) (string, Action, Buffer, error) {
 		minor := header[2]
 
 		if major != 3 || minor > 3 {
-			return "", Continue, nil, fmt.Errorf("inval format")
+			return "", nil, fmt.Errorf("inval format")
 		}
 
 		msgLen := int(header[3])<<8 | int(header[4])
 
 		if msgLen < 4 {
-			return "", Continue, nil, fmt.Errorf("msg length invalid")
+			return "", nil, fmt.Errorf("msg length invalid")
 		}
 
 		data, err := r.Peek(recordHeaderLen + msgLen)
 		if err != nil {
-			return "", Again, nil, err
+			return "", nil, err
 		}
 
 		data = data[recordHeaderLen:]
@@ -246,19 +246,19 @@ func filterByTLSServerName(r *bufio.Reader) (string, Action, Buffer, error) {
 		handshakeLen := int(data[1])<<16 | int(data[2])<<8 | int(data[3])
 
 		if len(data) < handshakeLen+4 {
-			return "", Stop, nil, fmt.Errorf("handshakeLen invalid")
+			return "", nil, fmt.Errorf("handshakeLen invalid")
 		}
 
 		switch data[0] {
 		case typeClientHello:
 			if serverName, found := ServerName(data); found {
-				return serverName, Stop, nil, nil
+				return serverName, nil, nil
 			}
 		}
 
-		return "", Stop, nil, fmt.Errorf("SNI not found")
+		return "", nil, fmt.Errorf("SNI not found")
 	}
-	return "", Continue, nil, fmt.Errorf("not https")
+	return "", nil, fmt.Errorf("not https")
 }
 
 // NewHTTPSFilter create a new http filter filter with http host header
