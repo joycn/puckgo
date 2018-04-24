@@ -22,7 +22,8 @@ type DNSConfig struct {
 
 // TransparentProxyConfig config params for transparent proxy
 type TransparentProxyConfig struct {
-	ProxyListen      string
+	ProxyListen string
+	//ProxyListen      []string
 	ProxyUpstream    string
 	ProxyTimeout     int
 	SecurityUpstream bool

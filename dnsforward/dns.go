@@ -132,18 +132,18 @@ func StartDNS(al *datasource.AccessList, proxyMatch bool, dnsConfig *config.DNSC
 			q := msg.Question[0]
 			name := q.Name
 			matched := al.MatchDomain(name)
-			if matched == proxyMatch && !config.PublicService {
-				if q.Qtype == 1 && q.Qclass == 1 && !remote.IP.IsLoopback() {
-					msg.Response = true
-					a := &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: 1, Class: 1, Ttl: 3600}, A: net.IPv4(111, 111, 111, 111)}
-					msg.Answer = append(msg.Answer, a)
-					b, err := msg.Pack()
-					if err == nil {
-						conn.WriteTo(b, remote)
-						continue
-					}
-				}
-			}
+			//if matched == proxyMatch && !config.PublicService {
+			//if q.Qtype == 1 && q.Qclass == 1 && !remote.IP.IsLoopback() {
+			//msg.Response = true
+			//a := &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: 1, Class: 1, Ttl: 3600}, A: net.IPv4(111, 111, 111, 111)}
+			//msg.Answer = append(msg.Answer, a)
+			//b, err := msg.Pack()
+			//if err == nil {
+			//conn.WriteTo(b, remote)
+			//continue
+			//}
+			//}
+			//}
 			m.Lock()
 			onFlyMap[msg.Id] = &request{
 				Name:   msg.Question[0].Name,

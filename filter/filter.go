@@ -71,7 +71,6 @@ func (filters *Filters) ExecFilters(r *bufio.Reader, port uint16) (string, Buffe
 		host, buf, err = f.Func(r)
 		return host, buf, err
 	}
-	err = fmt.Errorf("port %d not supported", port)
 	return host, buf, err
 }
 

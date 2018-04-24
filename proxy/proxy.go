@@ -8,6 +8,7 @@ import (
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
 	"github.com/sirupsen/logrus"
+	"strconv"
 	"sync"
 	//"github.com/joycn/puckgo/sni"
 	"fmt"
@@ -25,13 +26,27 @@ var (
 )
 
 func createFilters(ma *datasource.AccessList) *filter.Filters {
-
 	filters := filter.NewFilters(ma)
 	httpFilter := filter.NewHTTPFilter()
 	filters.AddFilter(httpFilter, uint16(80))
+	filters.AddFilter(httpFilter, uint16(8081))
 	httpsFilter := filter.NewHTTPSFilter()
 	filters.AddFilter(httpsFilter, uint16(443))
 	return filters
+}
+
+func setTransparentOpt(l *net.TCPListener) error {
+	cs, err := l.File()
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Error("get listener file failed")
+		return err
+	}
+
+	defer cs.Close()
+
+	return syscall.SetsockoptInt(int(cs.Fd()), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
 }
 
 // StartProxy start proxy to handle http and https
@@ -59,6 +74,14 @@ func StartProxy(ma *datasource.AccessList, proxyMatch bool, tranparentProxyConfi
 		}).Fatal("tranparent proxy listen failed")
 	}
 	defer listener.Close()
+
+	err = setTransparentOpt(listener)
+
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Fatal("set tranparent failed")
+	}
 
 	for {
 		conn, err := listener.AcceptTCP()
@@ -111,25 +134,41 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 			return
 		}
 	} else {
-		host, port, err = getOriginalDst(rawConn)
+		//host, port, err = getOriginalDst(rawConn)
+		var ports string
+		host, ports, err = net.SplitHostPort(rawConn.LocalAddr().String())
 
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err.Error(),
-			}).Error("get origin dst failed")
+			}).Error("get client address failed")
 			return
 		}
-		host, buf, err = filters.ExecFilters(downstreamReader, port)
+		portint, err := strconv.Atoi(ports)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error": err.Error(),
+			}).Error("get client port failed")
+			return
+		}
+		port = uint16(portint)
+		var domainName string
+		domainName, buf, err = filters.ExecFilters(downstreamReader, port)
 		if err != nil {
 			// do something
 			logrus.WithFields(logrus.Fields{
 				"error": err.Error(),
 				"dport": port,
-			}).Error("exec filters failed")
-			return
+			}).Warning("exec filters failed")
+		} else {
+			if domainName != "" {
+				host = domainName
+			}
 		}
+
 	}
 	matched := filters.Match(host)
+
 	if matched == proxyMatch {
 		d = proxyDialer
 	} else {
