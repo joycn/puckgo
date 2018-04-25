@@ -20,10 +20,13 @@ const (
 // DomainMap map info for dns name and actions
 type DomainMap map[string]bool
 
+// SubnetMap map info for dns name and actions
+type SubnetMap map[string]*net.IPNet
+
 // AccessList dns or ip subnets for proxy
 type AccessList struct {
 	Domains DomainMap
-	Subnets []*net.IPNet
+	Subnets SubnetMap
 	*sync.RWMutex
 }
 
@@ -35,6 +38,7 @@ type accessListConfig struct {
 func newAccessList(alc *accessListConfig) (*AccessList, error) {
 	al := new(AccessList)
 	al.Domains = make(DomainMap)
+	al.Subnets = make(SubnetMap)
 	al.RWMutex = new(sync.RWMutex)
 
 	for _, domain := range alc.Domains {
@@ -43,7 +47,7 @@ func newAccessList(alc *accessListConfig) (*AccessList, error) {
 
 	for _, subnet := range alc.Subnets {
 		if _, cidr, err := net.ParseCIDR(subnet); err == nil {
-			al.Subnets = append(al.Subnets, cidr)
+			al.Subnets[subnet] = cidr
 		} else {
 			return nil, err
 		}
@@ -52,22 +56,54 @@ func newAccessList(alc *accessListConfig) (*AccessList, error) {
 }
 
 // AddDomain add a domain to al
-func (al *AccessList) AddDomain(domain string) {
+func (al *AccessList) AddDomain(domain string) error {
 	al.Lock()
 	defer al.Unlock()
-	al.Domains[domain] = true
+	if _, ok := al.Domains[domain]; !ok {
+		al.Domains[domain] = true
+		return nil
+	}
+	return fmt.Errorf("%s domain existed", domain)
 }
 
 // AddSubnet add subnet to al
 func (al *AccessList) AddSubnet(subnet string) error {
+	var cidr *net.IPNet
+	var err error
+
 	al.Lock()
 	defer al.Unlock()
-	if _, cidr, err := net.ParseCIDR(subnet); err == nil {
-		al.Subnets = append(al.Subnets, cidr)
-	} else {
+	if _, ok := al.Subnets[subnet]; ok {
+		return fmt.Errorf("%s subnet existed", subnet)
+	}
+
+	if _, cidr, err = net.ParseCIDR(subnet); err != nil {
 		return err
 	}
+	al.Subnets[subnet] = cidr
 	return nil
+}
+
+// DeleteDomain add a domain to al
+func (al *AccessList) DeleteDomain(domain string) error {
+	al.Lock()
+	defer al.Unlock()
+	if _, ok := al.Domains[domain]; ok {
+		delete(al.Domains, domain)
+		return nil
+	}
+	return fmt.Errorf("%s domain not found", domain)
+}
+
+// DeleteSubnet add subnet to al
+func (al *AccessList) DeleteSubnet(subnet string) error {
+	al.Lock()
+	defer al.Unlock()
+	if _, ok := al.Subnets[subnet]; ok {
+		delete(al.Subnets, subnet)
+		return nil
+	}
+	return fmt.Errorf("%s subnet not found", subnet)
 }
 
 // GetAccessList get access list from source
@@ -81,6 +117,7 @@ func GetAccessList(source string) (*AccessList, error) {
 	case "file":
 		return AccessListFromFile(tokens[1])
 	case "etcd":
+		return AccessListFromEtcd(tokens[1])
 	}
 	return nil, fmt.Errorf("unsupported datasource")
 }

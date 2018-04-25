@@ -16,6 +16,7 @@ func start(cfg *config.Config) error {
 		fmt.Println(err)
 		return err
 	}
+
 	go dnsforward.StartDNS(al, cfg.ProxyMatch, &cfg.DNS)
 	proxy.StartProxy(al, cfg.ProxyMatch, &cfg.TransparentProxy)
 	//proxy.StartSocks5Proxy(&cfg.Socks5Proxy)
