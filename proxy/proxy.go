@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
@@ -149,6 +148,9 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 		host = dst.IP.String()
 
 		port = uint16(dst.Port)
+	}
+
+	if net.ParseIP(host) == nil {
 		var domainName string
 		domainName, buf, err = filters.ExecFilters(downstreamReader, port)
 		if err != nil {
@@ -162,8 +164,8 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 				host = domainName
 			}
 		}
-
 	}
+
 	matched := filters.Match(host)
 
 	if matched == proxyMatch {
