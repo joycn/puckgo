@@ -2,13 +2,14 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
+	"github.com/joycn/puckgo/iptables"
 	"github.com/sirupsen/logrus"
-	"strconv"
 	"sync"
 	//"github.com/joycn/puckgo/sni"
 	"fmt"
@@ -67,6 +68,14 @@ func StartProxy(ma *datasource.AccessList, proxyMatch bool, tranparentProxyConfi
 		}).Fatal("parse listen address failed")
 	}
 
+	if !config.PublicService {
+		if err := iptables.EnsureIptables(tranparentProxyConfig.ListenPort, lnsa.Port); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error": err.Error(),
+			}).Fatal("parse listen address failed")
+		}
+	}
+
 	listener, err := net.ListenTCP("tcp", lnsa)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -91,6 +100,7 @@ func StartProxy(ma *datasource.AccessList, proxyMatch bool, tranparentProxyConfi
 			}).Error("accepting connection error")
 			continue
 		}
+
 		go handleConn(conn, timeout, proxyMatch)
 	}
 }
@@ -135,23 +145,10 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 		}
 	} else {
 		//host, port, err = getOriginalDst(rawConn)
-		var ports string
-		host, ports, err = net.SplitHostPort(rawConn.LocalAddr().String())
+		dst := rawConn.LocalAddr().(*net.TCPAddr)
+		host = dst.IP.String()
 
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"error": err.Error(),
-			}).Error("get client address failed")
-			return
-		}
-		portint, err := strconv.Atoi(ports)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"error": err.Error(),
-			}).Error("get client port failed")
-			return
-		}
-		port = uint16(portint)
+		port = uint16(dst.Port)
 		var domainName string
 		domainName, buf, err = filters.ExecFilters(downstreamReader, port)
 		if err != nil {

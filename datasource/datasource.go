@@ -108,7 +108,7 @@ func (al *AccessList) DeleteSubnet(subnet string) error {
 
 // GetAccessList get access list from source
 func GetAccessList(source string) (*AccessList, error) {
-	tokens := strings.SplitN(source, ":", 2)
+	tokens := strings.SplitN(source, "://", 2)
 	if len(tokens) != 2 {
 		return nil, fmt.Errorf("datasource format error")
 	}
