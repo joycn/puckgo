@@ -106,11 +106,11 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 			continue
 		}
 
-		go handleConn(conn, timeout)
+		go handleConn(conn, timeout, config.PublicService && tranparentProxyConfig.DropMissMatch)
 	}
 }
 
-func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
+func handleConn(rawConn *net.TCPConn, timeout time.Duration, dropMissMatch bool) {
 
 	var (
 		wg   = &sync.WaitGroup{}
@@ -176,8 +176,10 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 
 	if matched {
 		d = proxyDialer
-	} else {
+	} else if !dropMissMatch {
 		d = proxy.Direct
+	} else {
+		return
 	}
 
 	upstream := fmt.Sprintf("%s:%d", host, port)
