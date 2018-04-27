@@ -6,6 +6,11 @@ import (
 	"github.com/joycn/puckgo/datasource"
 	"io"
 	"net"
+	"strings"
+)
+
+var (
+	filterMap = make(map[string]*Filter)
 )
 
 // Buffer write buffer for net.Conn
@@ -21,29 +26,32 @@ type Filter struct {
 
 // Filters Filter list witch match conditions used to check request
 type Filters struct {
-	m  map[uint16]*Filter
+	m  map[int]*Filter
 	al *datasource.AccessList
 }
 
 // NewFilters create a new filters with accesslist
 func NewFilters(al *datasource.AccessList) *Filters {
 	filters := &Filters{al: al}
-	filters.m = make(map[uint16]*Filter)
+	filters.m = make(map[int]*Filter)
 	return filters
 }
 
 // AddFilter add a new filter into filters
-func (filters *Filters) AddFilter(f *Filter, port uint16) error {
+func (filters *Filters) AddFilter(name string, port int) error {
 	//n := f.Name
 	if _, ok := filters.m[port]; !ok {
-		filters.m[port] = f
-		return nil
+		if f, ok := filterMap[strings.ToLower(name)]; ok {
+			filters.m[port] = f
+			return nil
+		}
+		return fmt.Errorf("%s filter not found", name)
 	}
 	return fmt.Errorf("filter exist")
 }
 
 // RemoveFilter remove a new filters from filters
-func (filters *Filters) RemoveFilter(port uint16) error {
+func (filters *Filters) RemoveFilter(port int) error {
 	//n := f.Name
 	if _, ok := filters.m[port]; ok {
 		delete(filters.m, port)
@@ -60,7 +68,7 @@ func (filters *Filters) CheckTargetIP(target string) bool {
 }
 
 // ExecFilters exec all filter to check request
-func (filters *Filters) ExecFilters(r *bufio.Reader, port uint16) (string, Buffer, error) {
+func (filters *Filters) ExecFilters(r *bufio.Reader, port int) (string, Buffer, error) {
 	var (
 		host string
 		buf  Buffer

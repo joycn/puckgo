@@ -19,7 +19,7 @@ const (
 	filterRule      = "-m addrtype --dst-type LOCAL -p tcp --dport %d -j REJECT"
 
 	manglePreroutingRule = "-j " + chainName
-	mangleRule           = "-i %s -p tcp -m tcp -j TPROXY --on-port %d --tproxy-mark 0x1/0x1"
+	mangleRule           = "-i %s -p tcp -m multiport --dports %s -j TPROXY --on-port %d --tproxy-mark 0x1/0x1"
 )
 
 func init() {
@@ -40,9 +40,9 @@ func ensureFilterTable(dport int) error {
 }
 
 //-A PREROUTING -i switch0 -p tcp -m tcp -j TPROXY --on-port 1080 --on-ip 0.0.0.0 --tproxy-mark 0x1/0x1
-func ensureMangleTable(port string, dport int) error {
+func ensureMangleTable(port string, ports []string, dport int) error {
 	iptInterface.EnsureRule(utiliptables.Prepend, utiliptables.TableMangle, utiliptables.ChainPrerouting, strings.Split(manglePreroutingRule, " ")...)
-	rule := fmt.Sprintf(mangleRule, port, dport)
+	rule := fmt.Sprintf(mangleRule, port, strings.Join(ports, ","), dport)
 	iptInterface.EnsureChain(utiliptables.TableMangle, chainName)
 	iptInterface.FlushChain(utiliptables.TableMangle, chainName)
 	_, err := iptInterface.EnsureRule(utiliptables.Prepend, utiliptables.TableMangle, chainName, strings.Split(rule, " ")...)
@@ -51,9 +51,9 @@ func ensureMangleTable(port string, dport int) error {
 }
 
 // EnsureIptables create iptables rules for transparent mode proxy
-func EnsureIptables(port string, listenPort int) error {
+func EnsureIptables(port string, ports []string, listenPort int) error {
 	if err := ensureFilterTable(listenPort); err != nil {
 		return err
 	}
-	return ensureMangleTable(port, listenPort)
+	return ensureMangleTable(port, ports, listenPort)
 }

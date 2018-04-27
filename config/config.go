@@ -20,6 +20,9 @@ type DNSConfig struct {
 	ExceptiveServer string
 }
 
+// ProxyProtocolMap protocol map to proxied
+type ProxyProtocolMap map[string][]int
+
 // TransparentProxyConfig config params for transparent proxy
 type TransparentProxyConfig struct {
 	ListenPort  string
@@ -28,6 +31,7 @@ type TransparentProxyConfig struct {
 	ProxyUpstream    string
 	ProxyTimeout     int
 	SecurityUpstream bool
+	ProxyProtocolMap
 }
 
 // Socks5ProxyConfig config params for socks5 proxy

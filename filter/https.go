@@ -13,7 +13,13 @@ const (
 	recordTypeHandshake recordType = 22
 	typeClientHello     uint8      = 1
 	extensionServerName uint16     = 0
+	// HTTPS filter name
+	HTTPS = "https"
 )
+
+func init() {
+	filterMap[HTTPS] = &Filter{Name: HTTPS, Func: filterByTLSServerName}
+}
 
 // ServerName get serverName from client hello packet
 func ServerName(data []byte) (string, bool) {

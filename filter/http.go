@@ -10,6 +10,8 @@ import (
 const (
 	// LongestMehodLen max read len to fetch http method
 	LongestMehodLen = 9
+	// HTTP filter name
+	HTTP = "http"
 )
 
 var (
@@ -33,9 +35,8 @@ var (
 	}
 )
 
-// NewHTTPFilter create a new http filter filter with http host header
-func NewHTTPFilter() *Filter {
-	return &Filter{Name: "http", Func: filterByHTTPHost}
+func init() {
+	filterMap[HTTP] = &Filter{Name: HTTP, Func: filterByHTTPHost}
 }
 
 func parseRequestLine(line string) (method, requestURI, proto string, ok bool) {

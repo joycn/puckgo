@@ -230,7 +230,7 @@ func handShake(conn net.Conn) (err error) {
 	return
 }
 
-func getRequest(conn net.Conn) (host string, port uint16, err error) {
+func getRequest(conn net.Conn) (host string, port int, err error) {
 	const (
 		idVer   = 0
 		idCmd   = 1
@@ -296,12 +296,12 @@ func getRequest(conn net.Conn) (host string, port uint16, err error) {
 	case typeDm:
 		host = string(buf[idDm0 : idDm0+buf[idDmLen]])
 	}
-	port = binary.BigEndian.Uint16(buf[reqLen-2 : reqLen])
+	port = int(binary.BigEndian.Uint16(buf[reqLen-2 : reqLen]))
 	return host, port, nil
 }
 
 // HandleSocks5Request handle a socks5 client request
-func HandleSocks5Request(conn net.Conn) (host string, port uint16, err error) {
+func HandleSocks5Request(conn net.Conn) (host string, port int, err error) {
 	if err = handShake(conn); err != nil {
 		return
 	}
