@@ -71,7 +71,7 @@ var targetConn map[datasource.MatchAction]*net.UDPConn
 var m sync.Mutex
 
 // StartDNS start dns server to forward or answer dns query
-func StartDNS(al *datasource.AccessList, proxyMatch bool, dnsConfig *config.DNSConfig) error {
+func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
 	//ma, err := datasource.GetMatchActions(source)
 	//if err != nil {
 	//logrus.Error(err)

@@ -7,7 +7,6 @@ var PublicService bool
 type Config struct {
 	LogLevel         string
 	DataSource       string
-	ProxyMatch       bool
 	DNS              DNSConfig
 	TransparentProxy TransparentProxyConfig
 	Socks5Proxy      Socks5ProxyConfig
