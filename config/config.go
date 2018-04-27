@@ -7,7 +7,6 @@ var PublicService bool
 type Config struct {
 	LogLevel         string
 	DataSource       string
-	ProxyMatch       bool
 	DNS              DNSConfig
 	TransparentProxy TransparentProxyConfig
 	Socks5Proxy      Socks5ProxyConfig
@@ -25,8 +24,9 @@ type ProxyProtocolMap map[string][]int
 
 // TransparentProxyConfig config params for transparent proxy
 type TransparentProxyConfig struct {
-	ListenPort  string
-	ProxyListen string
+	ListenPort    string
+	ProxyListen   string
+	DropMissMatch bool
 	//ProxyListen      []string
 	ProxyUpstream    string
 	ProxyTimeout     int

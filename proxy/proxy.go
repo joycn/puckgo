@@ -50,7 +50,7 @@ func setTransparentOpt(l *net.TCPListener) error {
 }
 
 // StartProxy start proxy to handle http and https
-func StartProxy(ma *datasource.AccessList, proxyMatch bool, tranparentProxyConfig *config.TransparentProxyConfig) {
+func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.TransparentProxyConfig) {
 	auth := &proxy.Auth{NoAuth: true}
 	timeout := time.Duration(time.Duration(tranparentProxyConfig.ProxyTimeout) * time.Millisecond)
 	filters = createFilters(ma, tranparentProxyConfig.ProxyProtocolMap)
@@ -106,11 +106,11 @@ func StartProxy(ma *datasource.AccessList, proxyMatch bool, tranparentProxyConfi
 			continue
 		}
 
-		go handleConn(conn, timeout, proxyMatch)
+		go handleConn(conn, timeout, config.PublicService && tranparentProxyConfig.DropMissMatch)
 	}
 }
 
-func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
+func handleConn(rawConn *net.TCPConn, timeout time.Duration, dropMissMatch bool) {
 
 	var (
 		wg   = &sync.WaitGroup{}
@@ -174,10 +174,12 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, proxyMatch bool) {
 
 	matched := filters.Match(host)
 
-	if matched == proxyMatch {
+	if matched {
 		d = proxyDialer
-	} else {
+	} else if !dropMissMatch {
 		d = proxy.Direct
+	} else {
+		return
 	}
 
 	upstream := fmt.Sprintf("%s:%d", host, port)
