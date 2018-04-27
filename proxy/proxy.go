@@ -179,6 +179,9 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, dropMissMatch bool)
 	} else if !dropMissMatch {
 		d = proxy.Direct
 	} else {
+		logrus.WithFields(logrus.Fields{
+			"host": host,
+		}).Debug("drop miss match")
 		return
 	}
 

@@ -7,6 +7,9 @@ import (
 	"github.com/joycn/puckgo/dnsforward"
 	"github.com/joycn/puckgo/proxy"
 	"github.com/sirupsen/logrus"
+	"net/http"
+	// net pprof
+	_ "net/http/pprof"
 )
 
 func start(cfg *config.Config) error {
@@ -16,6 +19,19 @@ func start(cfg *config.Config) error {
 		fmt.Println(err)
 		return err
 	}
+	lvl, err := logrus.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		logrus.SetLevel(lvl)
+	}
+	if cfg.LogLevel == "debug" {
+		go func() {
+			http.ListenAndServe(":6060", nil)
+		}()
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"datasource": al,
+	}).Debug("fetch access list success")
 
 	go dnsforward.StartDNS(al, &cfg.DNS)
 	proxy.StartProxy(al, &cfg.TransparentProxy)

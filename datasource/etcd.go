@@ -6,10 +6,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/coreos/etcd/clientv3"
+	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"regexp"
 	"strings"
-	//"strings"
 	"time"
 )
 
@@ -157,6 +157,7 @@ func AccessListFromEtcd(path string) (*AccessList, error) {
 }
 
 func (c *client) watchUpdate(ctx context.Context, prefix string, add, del watchCallback) {
+	var err error
 	rch := c.Watch(ctx, prefix, clientv3.WithPrefix())
 	for {
 		wresp := <-rch
@@ -164,13 +165,20 @@ func (c *client) watchUpdate(ctx context.Context, prefix string, add, del watchC
 			k := strings.TrimPrefix(string(ev.Kv.Key), prefix)
 			switch ev.Type {
 			case clientv3.EventTypePut:
-				if err := add(k); err != nil {
-					fmt.Println(err)
-				}
+				err = add(k)
 			case clientv3.EventTypeDelete:
-				if err := del(k); err != nil {
-					fmt.Println(err)
-				}
+				err = del(k)
+			}
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"error": err.Error(),
+					"event": ev,
+				}).Error("watch update failed")
+			} else {
+				logrus.WithFields(logrus.Fields{
+					"event": ev,
+					"key":   k,
+				}).Debug("watch update")
 			}
 		}
 	}
