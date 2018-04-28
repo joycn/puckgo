@@ -7,6 +7,7 @@ import (
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
 	"github.com/joycn/puckgo/iptables"
+	"github.com/joycn/puckgo/network"
 	"github.com/sirupsen/logrus"
 	"strconv"
 	"sync"
@@ -73,6 +74,11 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 			for _, port := range ports {
 				portArray = append(portArray, strconv.Itoa(port))
 			}
+		}
+		if err := network.ConfigTransparentNetwork(); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error": err.Error(),
+			}).Fatal("route config failed")
 		}
 		if err := iptables.EnsureIptables(tranparentProxyConfig.ListenPort, portArray, lnsa.Port); err != nil {
 			logrus.WithFields(logrus.Fields{
