@@ -6,10 +6,9 @@ import (
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
-	"github.com/joycn/puckgo/iptables"
+	//"github.com/joycn/puckgo/iptables"
 	"github.com/joycn/puckgo/network"
 	"github.com/sirupsen/logrus"
-	"strconv"
 	"sync"
 	//"github.com/joycn/puckgo/sni"
 	"fmt"
@@ -69,21 +68,10 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 	}
 
 	if !config.PublicService {
-		portArray := []string{}
-		for _, ports := range tranparentProxyConfig.ProxyProtocolMap {
-			for _, port := range ports {
-				portArray = append(portArray, strconv.Itoa(port))
-			}
-		}
 		if err := network.ConfigTransparentNetwork(); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err.Error(),
 			}).Fatal("route config failed")
-		}
-		if err := iptables.EnsureIptables(tranparentProxyConfig.ListenPort, portArray, lnsa.Port); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"error": err.Error(),
-			}).Fatal("parse listen address failed")
 		}
 	}
 
@@ -112,7 +100,7 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 			continue
 		}
 
-		go handleConn(conn, timeout, config.PublicService && tranparentProxyConfig.DropMissMatch)
+		go handleConn(conn, timeout, config.PublicService)
 	}
 }
 
@@ -123,7 +111,6 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, dropMissMatch bool)
 		buf  filter.Buffer
 		host string
 		port int
-		d    proxy.Dialer
 		err  error
 	)
 
@@ -162,37 +149,33 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, dropMissMatch bool)
 		port = dst.Port
 	}
 
-	if net.ParseIP(host) != nil {
-		var domainName string
-		domainName, buf, err = filters.ExecFilters(downstreamReader, port)
-		if err != nil {
-			// do something
-			logrus.WithFields(logrus.Fields{
-				"error": err.Error(),
-				"dport": port,
-			}).Warning("exec filters failed")
-		} else {
-			if domainName != "" {
-				host = domainName
-			}
-		}
-	}
+	//if net.ParseIP(host) != nil {
+	//var domainName string
+	//domainName, buf, err = filters.ExecFilters(downstreamReader, port)
+	//if err != nil {
+	//// do something
+	//logrus.WithFields(logrus.Fields{
+	//"error": err.Error(),
+	//"dport": port,
+	//}).Warning("exec filters failed")
+	//} else {
+	//if domainName != "" {
+	//host = domainName
+	//}
+	//}
+	//}
 
-	matched := filters.Match(host)
+	//matched := filters.Match(host)
 
-	if matched {
-		d = proxyDialer
-	} else if !dropMissMatch {
-		d = proxy.Direct
-	} else {
-		logrus.WithFields(logrus.Fields{
-			"host": host,
-		}).Debug("drop miss match")
-		return
-	}
+	//if !matched {
+	//logrus.WithFields(logrus.Fields{
+	//"request": rawConn.LocalAddr(),
+	//}).Warn("invailed request")
+	//return
+	//}
 
 	upstream := fmt.Sprintf("%s:%d", host, port)
-	sendConn, err := conn.DialUpstream(d, "tcp", upstream, timeout)
+	sendConn, err := conn.DialUpstream(proxyDialer, "tcp", upstream, timeout)
 
 	//sendConn.SetLinger(0)
 
@@ -234,9 +217,20 @@ func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err er
 	return
 }
 
-func copyData(wg *sync.WaitGroup, dst, src *conn.IdleTimeoutConn) {
+func prepareClose(dst *conn.IdleTimeoutConn) {
+	timeout := conn.FinTimeout * time.Second
+	dst.Timeout = timeout
+	dst.SetDeadline(time.Now().Add(timeout))
+	conn, ok := dst.StreamConn.(*net.TCPConn)
+	if ok {
+		conn.SetLinger(0)
+	}
+}
 
+func copyData(wg *sync.WaitGroup, dst, src *conn.IdleTimeoutConn) {
 	defer wg.Done()
+	defer dst.CloseWrite()
+	defer prepareClose(dst)
 
 	if _, err := io.Copy(dst, src); err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -245,72 +239,4 @@ func copyData(wg *sync.WaitGroup, dst, src *conn.IdleTimeoutConn) {
 			"downstream": dst.RemoteAddr(),
 		}).Error("copy from upstream to downstream failed")
 	}
-	dst.CloseWrite()
 }
-
-//func handleHTTP(r *bufio.Reader) (*http.Request, error) {
-
-//fmt.Println("http", time.Now())
-
-//req, err := http.ReadRequest(r)
-//if err != nil {
-//fmt.Println(err)
-//return nil, err
-//}
-
-//fmt.Println(req.Host)
-//return req, nil
-//}
-
-//func getOriginalDst(clientConn *net.TCPConn) (string, uint16, error) {
-//clientConnFile, err := clientConn.File()
-//if err != nil {
-//logrus.WithFields(logrus.Fields{
-//"error":      err.Error(),
-//"downstream": clientConn.RemoteAddr(),
-//}).Error("get client conn file")
-//return "", 0, err
-//}
-//defer clientConnFile.Close()
-
-////sa, err := syscall.GetsockoptInet4Addr(int(clientConnFile.Fd()), syscall.IPPROTO_IP, SO_ORIGINAL_DST)
-
-//var sa syscall.RawSockaddrInet4
-//var size = uint32(unsafe.Sizeof(sa))
-
-//err = getsockopt(int(clientConnFile.Fd()), syscall.IPPROTO_IP, 80, uintptr(unsafe.Pointer(&sa)), &size)
-//if err != nil {
-//logrus.WithFields(logrus.Fields{
-//"error":      err.Error(),
-//"downstream": clientConn.RemoteAddr(),
-//}).Error("get origin dst")
-//return "", 0, err
-//}
-
-//addr := net.IPv4(sa.Addr[0], sa.Addr[1], sa.Addr[2], sa.Addr[3]).String()
-//nport := sa.Port
-//lport := binary.BigEndian.Uint16((*(*[2]byte)(unsafe.Pointer(&nport)))[:])
-//port := uint16(lport)
-
-//local := fmt.Sprintf("%s:%d", addr, port)
-
-//if local == clientConn.LocalAddr().String() {
-//return addr, port, fmt.Errorf("no nat request")
-//}
-
-//return addr, port, nil
-
-////return addr + ":" + port, nil
-//}
-
-//func handleHTTPS(b *bufio.Reader) (io.Reader, error) {
-
-//fmt.Println("https", time.Now())
-
-//_, err := sni.ReadServerName(b)
-//if err != nil {
-//return b, nil
-//} else {
-//return nil, err
-//}
-//}

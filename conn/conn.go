@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	// FinTimeout timeout in seconds after rcv fin packet
+	FinTimeout = 30
+)
+
 // Dialer is a generic dialer to dial with different protocols
 type Dialer interface {
 	// Dial connects to the given address via the proxy.

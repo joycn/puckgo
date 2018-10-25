@@ -14,14 +14,11 @@ import (
 
 func start(cfg *config.Config) error {
 	logrus.SetFormatter(&logrus.TextFormatter{})
-	al, err := datasource.GetAccessList(cfg.DataSource)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
 	lvl, err := logrus.ParseLevel(cfg.LogLevel)
-	if err != nil {
+	if err == nil {
 		logrus.SetLevel(lvl)
+	} else {
+		fmt.Println("set log level failed: %s", err)
 	}
 	if cfg.LogLevel == "debug" {
 		go func() {
@@ -29,6 +26,11 @@ func start(cfg *config.Config) error {
 		}()
 	}
 
+	al, err := datasource.GetAccessList(cfg.DataSource)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
 	logrus.WithFields(logrus.Fields{
 		"datasource": al,
 	}).Debug("fetch access list success")

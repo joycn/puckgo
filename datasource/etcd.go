@@ -141,6 +141,8 @@ func AccessListFromEtcd(path string) (*AccessList, error) {
 		return nil, err
 	}
 
+	logrus.Debug("get acl from etcd: %+v", al)
+
 	ctx := context.Background()
 
 	go func() {

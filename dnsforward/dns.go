@@ -6,6 +6,7 @@ import (
 	"github.com/joycn/puckgo/datasource"
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"net"
 	"os"
 	"strings"
@@ -37,7 +38,18 @@ func excludedDNS(filename string) (map[string]bool, error) {
 	return ret, nil
 }
 
-func readFromServer(r, s *net.UDPConn) {
+func installIPset(msg *dns.Msg) {
+	for _, r := range msg.Answer {
+		h := r.Header()
+		ttl := h.Ttl
+		if h.Rrtype == dns.TypeA {
+			a := r.(*dns.A)
+			netlink.IPsetUpdateTimeout("vpn", a.A, ttl)
+		}
+	}
+}
+
+func readFromServer(r, s *net.UDPConn, ipset bool) {
 	b := make([]byte, 1500)
 	for {
 		n, err := r.Read(b)
@@ -61,6 +73,9 @@ func readFromServer(r, s *net.UDPConn) {
 		msg = new(dns.Msg)
 		err = msg.Unpack(b[:n])
 		if err == nil {
+			if ipset {
+				installIPset(msg)
+			}
 			s.WriteTo(b[:n], rq.Remote)
 		}
 	}
@@ -72,11 +87,6 @@ var m sync.Mutex
 
 // StartDNS start dns server to forward or answer dns query
 func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
-	//ma, err := datasource.GetMatchActions(source)
-	//if err != nil {
-	//logrus.Error(err)
-	//return err
-	//}
 	onFlyMap = make(map[uint16]*request)
 	targetConn = make(map[datasource.MatchAction]*net.UDPConn)
 	m = sync.Mutex{}
@@ -87,15 +97,13 @@ func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
 		logrus.Error(err)
 		return err
 	}
-	//targetConn[datasource.Default] = defaultServerConn
 
-	exceptiveServerAddr, err := net.ResolveUDPAddr("udp", dnsConfig.ExceptiveServer)
-	exceptiveServerConn, err := net.DialUDP("udp", nil, exceptiveServerAddr)
+	specifiedServerAddr, err := net.ResolveUDPAddr("udp", dnsConfig.SpecifiedServer)
+	specifiedServerConn, err := net.DialUDP("udp", nil, specifiedServerAddr)
 	if err != nil {
 		logrus.Error(err)
 		return err
 	}
-	//targetConn[datasource.Except] = exceptiveServerConn
 
 	addr, err := net.ResolveUDPAddr("udp", dnsConfig.Listen)
 	if err != nil {
@@ -109,10 +117,8 @@ func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
 		return err
 	}
 
-	//for _, s := range targetConn {
-	go readFromServer(defaultServerConn, conn)
-	go readFromServer(exceptiveServerConn, conn)
-	//}
+	go readFromServer(defaultServerConn, conn, false)
+	go readFromServer(specifiedServerConn, conn, true)
 
 	for {
 		b := make([]byte, 1500)
@@ -140,7 +146,7 @@ func StartDNS(al *datasource.AccessList, dnsConfig *config.DNSConfig) error {
 			m.Unlock()
 
 			if matched {
-				_, err = exceptiveServerConn.Write(b[:n])
+				_, err = specifiedServerConn.Write(b[:n])
 			} else {
 				_, err = defaultServerConn.Write(b[:n])
 			}

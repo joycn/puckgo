@@ -16,7 +16,7 @@ type Config struct {
 type DNSConfig struct {
 	Listen          string
 	DefaultServer   string
-	ExceptiveServer string
+	SpecifiedServer string
 }
 
 // ProxyProtocolMap protocol map to proxied
@@ -45,8 +45,8 @@ const (
 	DefaultDataSource = "file:/usr/local/etc/dns/forward/datasource"
 	// DefaultServer DNS server for DNS in China
 	DefaultServer = "114.114.114.114:53"
-	// ExceptiveServer DNS server for DNS outside China
-	ExceptiveServer = "8.8.8.8:53"
+	// SpecifiedServer DNS server for DNS outside China
+	SpecifiedServer = "8.8.8.8:53"
 	// DefaultListen listen address and port
 	DefaultListen = "0.0.0.0:53"
 	// DefaultProxyListen local transparent proxy listen on
