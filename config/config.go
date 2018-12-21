@@ -9,7 +9,6 @@ type Config struct {
 	DataSource       string
 	DNS              DNSConfig
 	TransparentProxy TransparentProxyConfig
-	Socks5Proxy      Socks5ProxyConfig
 }
 
 // DNSConfig dns config params for dns server
@@ -17,6 +16,7 @@ type DNSConfig struct {
 	Listen          string
 	DefaultServer   string
 	SpecifiedServer string
+	SpecifiedType   string
 }
 
 // ProxyProtocolMap protocol map to proxied
@@ -24,20 +24,10 @@ type ProxyProtocolMap map[string][]int
 
 // TransparentProxyConfig config params for transparent proxy
 type TransparentProxyConfig struct {
-	ListenPort    string
-	ProxyListen   string
-	DropMissMatch bool
-	//ProxyListen      []string
-	ProxyUpstream    string
-	ProxyTimeout     int
-	SecurityUpstream bool
-	ProxyProtocolMap
-}
-
-// Socks5ProxyConfig config params for socks5 proxy
-type Socks5ProxyConfig struct {
-	Socks5Listen     string
-	SecurityUpstream bool
+	Listen   string
+	Upstream string
+	Bind     string
+	Timeout  int
 }
 
 const (

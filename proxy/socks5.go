@@ -4,10 +4,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"golang.org/x/net/proxy"
 	"io"
 	"net"
-	"strconv"
 )
 
 var (
@@ -41,22 +39,6 @@ func (c *Command) Write(w io.Writer) error {
 	return nil
 }
 
-// PuckSocks simplified socks5 client with only connect method and no version or auth message
-func PuckSocks(network, addr string, auth *proxy.Auth, forward proxy.Dialer) (*puckSocks, error) {
-	s := &puckSocks{
-		network: network,
-		addr:    addr,
-		forward: forward,
-	}
-
-	return s, nil
-}
-
-type puckSocks struct {
-	network, addr string
-	forward       proxy.Dialer
-}
-
 const socks5Version = 5
 
 const (
@@ -84,45 +66,13 @@ var socks5Errors = []string{
 	"address type not supported",
 }
 
-// Dial connects to the address addr on the network net via the SOCKS5 proxy.
-func (s *puckSocks) Dial(network, addr string) (net.Conn, error) {
-	switch network {
-	case "tcp", "tcp6", "tcp4":
-	default:
-		return nil, errors.New("proxy: no support for SOCKS5 proxy connections of type " + network)
-	}
-
-	conn, err := s.forward.Dial(s.network, s.addr)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.connect(conn, addr); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	return conn, nil
-}
-
-// connect takes an existing connection to a socks5 proxy server,
+// Connect takes an existing connection to a socks5 proxy server,
 // and commands the server to extend that connection to target,
 // which must be a canonical address with a host and port.
-func (s *puckSocks) connect(conn net.Conn, target string) error {
-	var buf []byte
-	host, portStr, err := net.SplitHostPort(target)
-	if err != nil {
-		return err
-	}
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return errors.New("proxy: failed to parse port number: " + portStr)
-	}
-	if port < 1 || port > 0xffff {
-		return errors.New("proxy: port number out of range: " + portStr)
-	}
+func Connect(w io.Writer, host string, port int) error {
 
 	// the size here is just an estimate
-	buf = make([]byte, 0)
+	buf := make([]byte, 0)
 
 	buf = append(buf, socks5Version, socks5Connect, 0 /* reserved */)
 
@@ -144,8 +94,8 @@ func (s *puckSocks) connect(conn net.Conn, target string) error {
 	}
 	buf = append(buf, byte(port>>8), byte(port))
 
-	if _, err := conn.Write(buf); err != nil {
-		return errors.New("proxy: failed to write connect request to SOCKS5 proxy at " + s.addr + ": " + err.Error())
+	if _, err := w.Write(buf); err != nil {
+		return errors.New("proxy: failed to write connect request to SOCKS5 proxy at " + host + ": " + err.Error())
 	}
 
 	//if _, err := io.ReadFull(conn, buf[:4]); err != nil {

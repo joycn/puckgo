@@ -1,11 +1,12 @@
 package proxy
 
 import (
-	"bufio"
+	"crypto/tls"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/datasource"
 	"github.com/joycn/puckgo/filter"
+	quic "github.com/lucas-clemente/quic-go"
 	//"github.com/joycn/puckgo/iptables"
 	"github.com/joycn/puckgo/network"
 	"github.com/sirupsen/logrus"
@@ -17,7 +18,6 @@ import (
 	"net"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 var (
@@ -49,18 +49,24 @@ func setTransparentOpt(l *net.TCPListener) error {
 	return syscall.SetsockoptInt(int(cs.Fd()), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
 }
 
+var session quic.Session
+
 // StartProxy start proxy to handle http and https
 func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.TransparentProxyConfig) {
-	auth := &proxy.Auth{NoAuth: true}
-	timeout := time.Duration(time.Duration(tranparentProxyConfig.ProxyTimeout) * time.Millisecond)
-	filters = createFilters(ma, tranparentProxyConfig.ProxyProtocolMap)
-	if tranparentProxyConfig.SecurityUpstream {
-		proxyDialer, _ = PuckSocks("tcp", tranparentProxyConfig.ProxyUpstream, auth, conn.TLSDialer)
-	} else {
-		proxyDialer, _ = PuckSocks("tcp", tranparentProxyConfig.ProxyUpstream, auth, proxy.Direct)
+	var err error
+	timeout := time.Duration(time.Duration(tranparentProxyConfig.Timeout) * time.Millisecond)
+	//filters = createFilters(ma, tranparentProxyConfig.ProxyProtocolMap)
+	tlsConfig := &tls.Config{InsecureSkipVerify: true, ClientSessionCache: tls.NewLRUClientSessionCache(200)}
+	quicConfig := &quic.Config{KeepAlive: true}
+	session, err = quic.DialAddr(tranparentProxyConfig.Upstream, tlsConfig, quicConfig)
+
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Fatal("dial upstream proxy failed")
 	}
 
-	lnsa, err := net.ResolveTCPAddr("tcp", tranparentProxyConfig.ProxyListen)
+	lnsa, err := net.ResolveTCPAddr("tcp", tranparentProxyConfig.Listen)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err.Error(),
@@ -100,38 +106,38 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 			continue
 		}
 
-		go handleConn(conn, timeout, config.PublicService)
+		go handleConn(conn, timeout)
 	}
 }
 
-func handleConn(rawConn *net.TCPConn, timeout time.Duration, dropMissMatch bool) {
+type bidirectionalConn interface {
+	io.Reader
+	io.Writer
+	CloseWrite() error
+}
+
+func syncCopy(wg *sync.WaitGroup, dst, src bidirectionalConn) error {
+	defer wg.Done()
+	defer dst.CloseWrite()
+	//defer src.CloseRead()
+
+	_, err := io.Copy(dst, src)
+	return err
+}
+
+func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 
 	var (
 		wg   = &sync.WaitGroup{}
-		buf  filter.Buffer
 		host string
 		port int
 		err  error
 	)
 
-	c := conn.NewIdleTimeoutConn(rawConn, timeout)
-	downstreamReader := bufio.NewReader(c)
+	src := conn.NewIdleTimeoutConn(rawConn, timeout)
 
-	defer c.Close()
+	defer src.Close()
 
-	//defer func() {
-	////downstreamReader.Reset(nil)
-	//if needCloseConn {
-	//if err := c.Close(); err != nil {
-	//logrus.WithFields(logrus.Fields{
-	//"error":  err.Error(),
-	//"remote": c.RemoteAddr(),
-	//}).Error("conn close failed")
-	//}
-	//}
-	//}()
-
-	//c.SetLinger(0)
 	if config.PublicService {
 		host, port, err = HandleSocks5Request(rawConn)
 		if err != nil {
@@ -142,101 +148,51 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, dropMissMatch bool)
 			return
 		}
 	} else {
-		//host, port, err = getOriginalDst(rawConn)
 		dst := rawConn.LocalAddr().(*net.TCPAddr)
 		host = dst.IP.String()
 
 		port = dst.Port
 	}
 
-	//if net.ParseIP(host) != nil {
-	//var domainName string
-	//domainName, buf, err = filters.ExecFilters(downstreamReader, port)
-	//if err != nil {
-	//// do something
-	//logrus.WithFields(logrus.Fields{
-	//"error": err.Error(),
-	//"dport": port,
-	//}).Warning("exec filters failed")
-	//} else {
-	//if domainName != "" {
-	//host = domainName
-	//}
-	//}
-	//}
-
-	//matched := filters.Match(host)
-
-	//if !matched {
-	//logrus.WithFields(logrus.Fields{
-	//"request": rawConn.LocalAddr(),
-	//}).Warn("invailed request")
-	//return
-	//}
-
-	upstream := fmt.Sprintf("%s:%d", host, port)
-	sendConn, err := conn.DialUpstream(proxyDialer, "tcp", upstream, timeout)
-
-	//sendConn.SetLinger(0)
-
+	stream, err := conn.NewQuicStream(session)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
-			"error":    err.Error(),
-			"upstream": upstream,
-		}).Error("dial upstream failed")
+			"error": err.Error(),
+		}).Error("open stream failed")
+		return
+	}
+	dst := conn.NewIdleTimeoutConn(stream, timeout)
+	defer dst.Close()
+
+	if err = Connect(dst, host, port); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Error("connect upstream failed")
 		return
 	}
 
-	wg.Add(1)
+	wg.Add(2)
 
-	go copyData(wg, c, sendConn)
+	go func() {
+		if err := syncCopy(wg, dst, src); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error":      err.Error(),
+				"upstream":   fmt.Sprintf("%s:%d", host, port),
+				"downstream": rawConn.RemoteAddr(),
+			}).Error("copy from downstream to upstream failed")
+		}
+	}()
 
-	//defer c.CloseRead()
-	defer sendConn.Close()
-	if buf != nil {
-		buf.Write(sendConn)
-	}
-	if _, err := io.Copy(sendConn, downstreamReader); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error":      err.Error(),
-			"upstream":   upstream,
-			"downstream": c.RemoteAddr(),
-		}).Error("copy from downstream to upstream failed")
-	}
-
-	sendConn.CloseWrite()
+	go func() {
+		if err := syncCopy(wg, src, dst); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error":      err.Error(),
+				"upstream":   fmt.Sprintf("%s:%d", host, port),
+				"downstream": rawConn.RemoteAddr(),
+			}).Error("copy from upstreamstream to downstream failed")
+		}
+	}()
 
 	wg.Wait()
-}
-
-func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err error) {
-	_, _, e1 := syscall.Syscall6(syscall.SYS_GETSOCKOPT, uintptr(s), uintptr(level), uintptr(name), uintptr(val), uintptr(unsafe.Pointer(vallen)), 0)
-	if e1 != 0 {
-		err = e1
-	}
-	return
-}
-
-func prepareClose(dst *conn.IdleTimeoutConn) {
-	timeout := conn.FinTimeout * time.Second
-	dst.Timeout = timeout
-	dst.SetDeadline(time.Now().Add(timeout))
-	conn, ok := dst.StreamConn.(*net.TCPConn)
-	if ok {
-		conn.SetLinger(0)
-	}
-}
-
-func copyData(wg *sync.WaitGroup, dst, src *conn.IdleTimeoutConn) {
-	defer wg.Done()
-	defer dst.CloseWrite()
-	defer prepareClose(dst)
-
-	if _, err := io.Copy(dst, src); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error":      err.Error(),
-			"upstream":   src.RemoteAddr(),
-			"downstream": dst.RemoteAddr(),
-		}).Error("copy from upstream to downstream failed")
-	}
+	src.Close()
 }
