@@ -5,6 +5,7 @@ import (
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/datasource"
+	"github.com/joycn/puckgo/dnsforward"
 	"github.com/joycn/puckgo/filter"
 	quic "github.com/lucas-clemente/quic-go"
 	//"github.com/joycn/puckgo/iptables"
@@ -89,7 +90,7 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 	}
 	defer listener.Close()
 
-	err = setTransparentOpt(listener)
+	err = network.SetTransparentOpt(listener)
 
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -149,7 +150,9 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 		}
 	} else {
 		dst := rawConn.LocalAddr().(*net.TCPAddr)
-		host = dst.IP.String()
+		ipAddress := dst.IP.String()
+
+		host = dnsforward.GetDomain(ipAddress)
 
 		port = dst.Port
 	}
