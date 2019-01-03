@@ -1,14 +1,12 @@
 package proxy
 
 import (
-	"crypto/tls"
+	//"crypto/tls"
+	"github.com/joycn/dnsforward"
+	"github.com/joycn/dnsforward/datasource"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
-	"github.com/joycn/puckgo/datasource"
-	"github.com/joycn/puckgo/dnsforward"
 	"github.com/joycn/puckgo/filter"
-	quic "github.com/lucas-clemente/quic-go"
-	//"github.com/joycn/puckgo/iptables"
 	"github.com/joycn/puckgo/network"
 	"github.com/sirupsen/logrus"
 	"sync"
@@ -50,16 +48,10 @@ func setTransparentOpt(l *net.TCPListener) error {
 	return syscall.SetsockoptInt(int(cs.Fd()), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
 }
 
-var session quic.Session
-
 // StartProxy start proxy to handle http and https
 func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.TransparentProxyConfig) {
 	var err error
 	timeout := time.Duration(time.Duration(tranparentProxyConfig.Timeout) * time.Millisecond)
-	//filters = createFilters(ma, tranparentProxyConfig.ProxyProtocolMap)
-	tlsConfig := &tls.Config{InsecureSkipVerify: true, ClientSessionCache: tls.NewLRUClientSessionCache(200)}
-	quicConfig := &quic.Config{KeepAlive: true}
-	session, err = quic.DialAddr(tranparentProxyConfig.Upstream, tlsConfig, quicConfig)
 
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -98,6 +90,14 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 		}).Fatal("set tranparent failed")
 	}
 
+	target, err := net.ResolveTCPAddr("tcp", tranparentProxyConfig.Upstream)
+
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err.Error(),
+		}).Fatal("proxy upstream format error")
+	}
+
 	for {
 		conn, err := listener.AcceptTCP()
 		if err != nil {
@@ -107,7 +107,7 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 			continue
 		}
 
-		go handleConn(conn, timeout)
+		go handleConn(conn, timeout, target)
 	}
 }
 
@@ -126,7 +126,7 @@ func syncCopy(wg *sync.WaitGroup, dst, src bidirectionalConn) error {
 	return err
 }
 
-func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
+func handleConn(rawConn *net.TCPConn, timeout time.Duration, target *net.TCPAddr) {
 
 	var (
 		wg   = &sync.WaitGroup{}
@@ -157,7 +157,7 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration) {
 		port = dst.Port
 	}
 
-	stream, err := conn.NewQuicStream(session)
+	stream, err := net.DialTCP("tcp4", nil, target)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err.Error(),

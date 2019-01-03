@@ -1,5 +1,9 @@
 package config
 
+import (
+	"github.com/joycn/dnsforward"
+)
+
 // PublicService whether run as a public service mode or a local gw mode
 var PublicService bool
 
@@ -7,16 +11,8 @@ var PublicService bool
 type Config struct {
 	LogLevel         string
 	DataSource       string
-	DNS              DNSConfig
+	DNS              dnsforward.DNSConfig
 	TransparentProxy TransparentProxyConfig
-}
-
-// DNSConfig dns config params for dns server
-type DNSConfig struct {
-	Listen          string
-	DefaultServer   string
-	SpecifiedServer string
-	SpecifiedType   string
 }
 
 // ProxyProtocolMap protocol map to proxied

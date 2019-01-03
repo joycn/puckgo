@@ -3,7 +3,7 @@ package filter
 import (
 	"bufio"
 	"fmt"
-	"github.com/joycn/puckgo/datasource"
+	"github.com/joycn/dnsforward/datasource"
 	"io"
 	"net"
 	"strings"
