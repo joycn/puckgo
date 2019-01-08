@@ -24,7 +24,7 @@ import (
 )
 
 var cfgFile string
-var cfg *config.Config = &config.Config{}
+var cfg = &config.Config{}
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -106,7 +106,7 @@ func initConfig() {
 	//os.Exit(-1)
 	//}
 
-	if cfg.TransparentProxy.ProxyUpstream == "" {
+	if cfg.Proxy.Mode != config.SocksServerMode && cfg.Proxy.Upstream == "" {
 		fmt.Println("upstream not set")
 		os.Exit(-1)
 	}

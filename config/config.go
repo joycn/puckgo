@@ -3,41 +3,44 @@ package config
 // PublicService whether run as a public service mode or a local gw mode
 var PublicService bool
 
+// Mode for proxy type
+type Mode string
+
+const (
+	// TransparentMode transparent proxy mode
+	TransparentMode Mode = "transparent"
+	// SocksLocalMode socks5 local for standard socks server
+	SocksLocalMode Mode = "local"
+	// SocksServerMode socks5 server mode for private mode socks server
+	SocksServerMode Mode = "server"
+)
+
 // Config params for dnsforward
 type Config struct {
-	LogLevel         string
-	DataSource       string
-	DNS              DNSConfig
-	TransparentProxy TransparentProxyConfig
-	Socks5Proxy      Socks5ProxyConfig
-}
-
-// DNSConfig dns config params for dns server
-type DNSConfig struct {
-	Listen          string
-	DefaultServer   string
-	SpecifiedServer string
+	LogLevel   string
+	DataSource string
+	Proxy      ProxyConfig
 }
 
 // ProxyProtocolMap protocol map to proxied
 type ProxyProtocolMap map[string][]int
 
-// TransparentProxyConfig config params for transparent proxy
-type TransparentProxyConfig struct {
-	ListenPort    string
-	ProxyListen   string
-	DropMissMatch bool
-	//ProxyListen      []string
-	ProxyUpstream    string
-	ProxyTimeout     int
-	SecurityUpstream bool
-	ProxyProtocolMap
+// ProxyConfig config for proxy
+type ProxyConfig struct {
+	Transparent *TransparentProxyConfig
+	Listen      string
+	Upstream    string
+	Bind        string
+	Timeout     int
+	Key         string
+	Mode
 }
 
-// Socks5ProxyConfig config params for socks5 proxy
-type Socks5ProxyConfig struct {
-	Socks5Listen     string
-	SecurityUpstream bool
+// TransparentProxyConfig config params for transparent proxy
+type TransparentProxyConfig struct {
+	Listen          string
+	DefaultServer   string
+	SpecifiedServer string
 }
 
 const (

@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/joycn/datasource"
 	"github.com/joycn/puckgo/config"
-	"github.com/joycn/puckgo/datasource"
-	"github.com/joycn/puckgo/dnsforward"
 	"github.com/joycn/puckgo/proxy"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	// net pprof
-	_ "net/http/pprof"
+	//_ "net/http/pprof"
 )
 
 func start(cfg *config.Config) error {
@@ -35,8 +34,11 @@ func start(cfg *config.Config) error {
 		"datasource": al,
 	}).Debug("fetch access list success")
 
-	go dnsforward.StartDNS(al, &cfg.DNS)
-	proxy.StartProxy(al, &cfg.TransparentProxy)
-	//proxy.StartSocks5Proxy(&cfg.Socks5Proxy)
+	p, err := proxy.NewProxy(al, &cfg.Proxy)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	p.StartProxy(al)
 	return nil
 }
