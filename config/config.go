@@ -1,29 +1,46 @@
 package config
 
-import (
-	"github.com/joycn/dnsforward"
-)
-
 // PublicService whether run as a public service mode or a local gw mode
 var PublicService bool
 
+// Mode for proxy type
+type Mode string
+
+const (
+	// TransparentMode transparent proxy mode
+	TransparentMode Mode = "transparent"
+	// SocksLocalMode socks5 local for standard socks server
+	SocksLocalMode Mode = "local"
+	// SocksServerMode socks5 server mode for private mode socks server
+	SocksServerMode Mode = "server"
+)
+
 // Config params for dnsforward
 type Config struct {
-	LogLevel         string
-	DataSource       string
-	DNS              dnsforward.DNSConfig
-	TransparentProxy TransparentProxyConfig
+	LogLevel   string
+	DataSource string
+	Proxy      ProxyConfig
 }
 
 // ProxyProtocolMap protocol map to proxied
 type ProxyProtocolMap map[string][]int
 
+// ProxyConfig config for proxy
+type ProxyConfig struct {
+	Transparent *TransparentProxyConfig
+	Listen      string
+	Upstream    string
+	Bind        string
+	Timeout     int
+	Key         string
+	Mode
+}
+
 // TransparentProxyConfig config params for transparent proxy
 type TransparentProxyConfig struct {
-	Listen   string
-	Upstream string
-	Bind     string
-	Timeout  int
+	Listen          string
+	DefaultServer   string
+	SpecifiedServer string
 }
 
 const (

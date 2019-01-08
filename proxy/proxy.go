@@ -2,12 +2,12 @@ package proxy
 
 import (
 	//"crypto/tls"
+	"github.com/joycn/datasource"
 	"github.com/joycn/dnsforward"
-	"github.com/joycn/dnsforward/datasource"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
-	"github.com/joycn/puckgo/filter"
 	"github.com/joycn/puckgo/network"
+	"github.com/joycn/socks"
 	"github.com/sirupsen/logrus"
 	"sync"
 	//"github.com/joycn/puckgo/sni"
@@ -21,18 +21,11 @@ import (
 
 var (
 	proxyDialer proxy.Dialer
-	filters     *filter.Filters
 )
 
-func createFilters(ma *datasource.AccessList, pm config.ProxyProtocolMap) *filter.Filters {
-	filters := filter.NewFilters(ma)
-	for name, ports := range pm {
-		for _, port := range ports {
-			filters.AddFilter(name, port)
-		}
-	}
-	return filters
-}
+const magicChar = "RojvQ_OWDeEGMBXIZF4Cy5nVJgqiSs3-1twbHKNf+rT8Ldm2ckPhl79zAxauYp6U"
+
+const paddingRune = '0'
 
 func setTransparentOpt(l *net.TCPListener) error {
 	cs, err := l.File()
@@ -48,33 +41,79 @@ func setTransparentOpt(l *net.TCPListener) error {
 	return syscall.SetsockoptInt(int(cs.Fd()), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
 }
 
-// StartProxy start proxy to handle http and https
-func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.TransparentProxyConfig) {
-	var err error
-	timeout := time.Duration(time.Duration(tranparentProxyConfig.Timeout) * time.Millisecond)
+// ServeConn to hanlde new conn request
+type ServeConn func(conn net.Conn) error
 
+// Proxy proxy for puckgo
+type Proxy struct {
+	Mode         config.Mode
+	Timeout      time.Duration
+	ListenAddr   *net.TCPAddr
+	UpstreamAddr *net.TCPAddr
+	conn.Dialer
+	conn.Reception
+}
+
+// NewProxy create a new proxy
+func NewProxy(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) (*Proxy, error) {
+	p := &Proxy{
+		Mode: proxyConfig.Mode,
+	}
+	p.Timeout = time.Duration(proxyConfig.Timeout) * time.Millisecond
+
+	lnsa, err := net.ResolveTCPAddr("tcp", proxyConfig.Listen)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err.Error(),
-		}).Fatal("dial upstream proxy failed")
+		return nil, err
 	}
 
-	lnsa, err := net.ResolveTCPAddr("tcp", tranparentProxyConfig.Listen)
-	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err.Error(),
-		}).Fatal("parse listen address failed")
-	}
+	p.ListenAddr = lnsa
 
-	if !config.PublicService {
-		if err := network.ConfigTransparentNetwork(); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"error": err.Error(),
-			}).Fatal("route config failed")
+	switch proxyConfig.Mode {
+	case config.TransparentMode:
+		if proxyConfig.Transparent == nil {
+			return nil, fmt.Errorf("no transparent config found")
 		}
-	}
+		if err := network.ConfigTransparentNetwork(); err != nil {
+			return nil, err
+		}
+		f := dnsforward.NewDNSForwarder(ma)
+		t := proxyConfig.Transparent
+		go f.StartDNS(t.DefaultServer, t.SpecifiedServer, t.Listen)
+		r := &conn.Transparent{DNS: f}
+		s, err := conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key)
+		if err != nil {
+			return nil, err
+		}
+		p.Dialer = s
+		p.Reception = r
+	case config.SocksLocalMode:
+		r := &socks.Server{AccessList: ma}
+		s, err := conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key)
+		if err != nil {
+			return nil, err
+		}
+		p.Dialer = s
+		p.Reception = r
 
-	listener, err := net.ListenTCP("tcp", lnsa)
+	case config.SocksServerMode:
+		socks5 := &socks.Server{Config: &socks.Config{NoAuth: true}, AccessList: ma}
+		r, err := conn.NewCryptoReception(socks5, proxyConfig.Key)
+		if err != nil {
+			return nil, err
+		}
+		s := &conn.DirectDialer{}
+		p.Dialer = s
+		p.Reception = r
+	}
+	return p, nil
+}
+
+// StartProxy start proxy to handle http and https
+func (p *Proxy) StartProxy(ma *datasource.AccessList) {
+
+	var err error
+
+	listener, err := net.ListenTCP("tcp", p.ListenAddr)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err.Error(),
@@ -90,14 +129,6 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 		}).Fatal("set tranparent failed")
 	}
 
-	target, err := net.ResolveTCPAddr("tcp", tranparentProxyConfig.Upstream)
-
-	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err.Error(),
-		}).Fatal("proxy upstream format error")
-	}
-
 	for {
 		conn, err := listener.AcceptTCP()
 		if err != nil {
@@ -107,7 +138,7 @@ func StartProxy(ma *datasource.AccessList, tranparentProxyConfig *config.Transpa
 			continue
 		}
 
-		go handleConn(conn, timeout, target)
+		go p.handleConn(conn)
 	}
 }
 
@@ -126,52 +157,54 @@ func syncCopy(wg *sync.WaitGroup, dst, src bidirectionalConn) error {
 	return err
 }
 
-func handleConn(rawConn *net.TCPConn, timeout time.Duration, target *net.TCPAddr) {
+func (p *Proxy) handleConn(rawConn net.Conn) error {
 
 	var (
-		wg   = &sync.WaitGroup{}
-		host string
-		port int
-		err  error
+		wg  = &sync.WaitGroup{}
+		c   net.Conn
+		err error
 	)
 
-	src := conn.NewIdleTimeoutConn(rawConn, timeout)
+	defer func() {
+		rawConn.Close()
+	}()
 
-	defer src.Close()
+	timeout := p.Timeout
 
-	if config.PublicService {
-		host, port, err = HandleSocks5Request(rawConn)
-		if err != nil {
-			// do something
-			logrus.WithFields(logrus.Fields{
-				"error": err.Error(),
-			}).Error("handle socks5 request")
-			return
-		}
-	} else {
-		dst := rawConn.LocalAddr().(*net.TCPAddr)
-		ipAddress := dst.IP.String()
+	addr, c, err := p.Recept(rawConn)
 
-		host = dnsforward.GetDomain(ipAddress)
-
-		port = dst.Port
-	}
-
-	stream, err := net.DialTCP("tcp4", nil, target)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
-			"error": err.Error(),
-		}).Error("open stream failed")
-		return
+			"error":      err.Error(),
+			"downstream": rawConn.RemoteAddr(),
+		}).Error("get request host from downstream failed")
+		return err
 	}
-	dst := conn.NewIdleTimeoutConn(stream, timeout)
-	defer dst.Close()
 
-	if err = Connect(dst, host, port); err != nil {
+	src, err := conn.NewIdleTimeoutConn(c, timeout)
+	if err != nil {
 		logrus.WithFields(logrus.Fields{
-			"error": err.Error(),
-		}).Error("connect upstream failed")
-		return
+			"error":      err.Error(),
+			"downstream": rawConn.RemoteAddr(),
+		}).Error("set timeout failed for downstream")
+		return err
+	}
+
+	upstreamConn, err := p.Dial(addr)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error":      err.Error(),
+			"downstream": rawConn.RemoteAddr(),
+		}).Error("dial upstream failed")
+		return err
+	}
+	dst, err := conn.NewIdleTimeoutConn(upstreamConn, timeout)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error":      err.Error(),
+			"downstream": rawConn.RemoteAddr(),
+		}).Error("set timeout failed for upstream")
+		return err
 	}
 
 	wg.Add(2)
@@ -180,7 +213,7 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, target *net.TCPAddr
 		if err := syncCopy(wg, dst, src); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error":      err.Error(),
-				"upstream":   fmt.Sprintf("%s:%d", host, port),
+				"upstream":   fmt.Sprintf("%s", addr.String()),
 				"downstream": rawConn.RemoteAddr(),
 			}).Error("copy from downstream to upstream failed")
 		}
@@ -190,12 +223,12 @@ func handleConn(rawConn *net.TCPConn, timeout time.Duration, target *net.TCPAddr
 		if err := syncCopy(wg, src, dst); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error":      err.Error(),
-				"upstream":   fmt.Sprintf("%s:%d", host, port),
+				"upstream":   fmt.Sprintf("%s", addr.String()),
 				"downstream": rawConn.RemoteAddr(),
 			}).Error("copy from upstreamstream to downstream failed")
 		}
 	}()
 
 	wg.Wait()
-	src.Close()
+	return nil
 }

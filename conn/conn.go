@@ -2,7 +2,7 @@ package conn
 
 import (
 	"fmt"
-	"io"
+	"github.com/joycn/socks"
 	"net"
 	"time"
 )
@@ -34,40 +34,19 @@ type Peer struct {
 	Type    string
 }
 
-// Dialer is a generic dialer to dial with different protocols
+// Dialer function type for dial
 type Dialer interface {
-	// Dial connects to the given address via the proxy.
-	Dial(network, addr string) (c net.Conn, err error)
+	Dial(addr *socks.AddrSpec) (c net.Conn, err error)
+}
+
+// Reception function type to get request target
+type Reception interface {
+	Recept(c net.Conn) (*socks.AddrSpec, net.Conn, error)
 }
 
 // StreamConn net.Conn plus CloseWrite for tcp and tls conn
 type StreamConn interface {
-	io.Reader
-	// Write writes data to the stream.
-	// Write can be made to time out and return a net.Error with Timeout() == true
-	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
-	// If the stream was canceled by the peer, the error implements the StreamError
-	// interface, and Canceled() == true.
-	io.Writer
-	// Close closes the write-direction of the stream.
-	// Future calls to Write are not permitted after calling Close.
-	// It must not be called concurrently with Write.
-	// It must not be called after calling CancelWrite.
-	io.Closer
-	// SetReadDeadline sets the deadline for future Read calls and
-	// any currently-blocked Read call.
-	// A zero value for t means Read will not time out.
-	SetReadDeadline(t time.Time) error
-	// SetWriteDeadline sets the deadline for future Write calls
-	// and any currently-blocked Write call.
-	// Even if write times out, it may return n > 0, indicating that
-	// some of the data was successfully written.
-	// A zero value for t means Write will not time out.
-	SetWriteDeadline(t time.Time) error
-	// SetDeadline sets the read and write deadlines associated
-	// with the connection. It is equivalent to calling both
-	// SetReadDeadline and SetWriteDeadline.
-	SetDeadline(t time.Time) error
+	net.Conn
 	// CloseWrite shuts down the writing side of the Stream connection.
 	// Most callers should just use Close.
 	CloseWrite() error
@@ -99,24 +78,28 @@ func (c *IdleTimeoutConn) Write(buf []byte) (int, error) {
 }
 
 // DialUpstream dial upstream with dialer and return an IdleTimeoutConn
-func DialUpstream(dialer Dialer, network, target string, timeout time.Duration) (*IdleTimeoutConn, error) {
-	c, err := dialer.Dial(network, target)
-	if err != nil {
-		return nil, err
-	}
+//func DialUpstream(dialer Dialer, addr *socks.AddrSpec, timeout time.Duration) (*IdleTimeoutConn, error) {
+//c, err := dial(addr)
+//if err != nil {
+//return nil, err
+//}
 
-	var streamConn StreamConn
-	var ok bool
+//var streamConn StreamConn
+//var ok bool
 
-	if streamConn, ok = c.(StreamConn); !ok {
-		return nil, fmt.Errorf("not stream conn")
-	}
+//if streamConn, ok = c.(StreamConn); !ok {
+//return nil, fmt.Errorf("not stream conn")
+//}
 
-	return &IdleTimeoutConn{streamConn, timeout}, nil
+//return &IdleTimeoutConn{streamConn, timeout}, nil
 
-}
+//}
 
 // NewIdleTimeoutConn create a new IdleTimeoutConn with timeout
-func NewIdleTimeoutConn(c StreamConn, timeout time.Duration) *IdleTimeoutConn {
-	return &IdleTimeoutConn{c, timeout}
+func NewIdleTimeoutConn(c net.Conn, timeout time.Duration) (*IdleTimeoutConn, error) {
+	s, ok := c.(StreamConn)
+	if !ok {
+		return nil, fmt.Errorf("not streamConn type")
+	}
+	return &IdleTimeoutConn{s, timeout}, nil
 }
