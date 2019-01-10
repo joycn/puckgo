@@ -16,7 +16,7 @@ type NormalDialer struct {
 }
 
 // NewNormalDialer create NormalDialer with a base64 string
-func NewNormalDialer(network, upstream, key string, match bool, ma *datasource.AccessList) (*NormalDialer, error) {
+func NewNormalDialer(network, upstream string, match bool, ma *datasource.AccessList) (*NormalDialer, error) {
 	return &NormalDialer{Network: network, UpstreamAddr: upstream, AccessList: ma, match: match}, nil
 }
 
@@ -44,7 +44,7 @@ type NormalReception struct {
 }
 
 // NewNormalReception return a NormalReception with noauth socks server
-func NewNormalReception(s *socks.Server, key string) (*NormalReception, error) {
+func NewNormalReception(s *socks.Server) (*NormalReception, error) {
 	r := &NormalReception{s: s}
 	r.s.NoAuth = true
 	return r, nil
