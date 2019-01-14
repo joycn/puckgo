@@ -39,12 +39,12 @@ type CryptoConn struct {
 	w *cipher.StreamWriter
 }
 
-func (c *CryptoConn) Read(dst []byte) (n int, err error) {
-	return c.r.Read(dst)
+func (c *CryptoConn) Read(b []byte) (n int, err error) {
+	return c.r.Read(b)
 }
 
-func (c *CryptoConn) Write(src []byte) (n int, err error) {
-	return c.w.Write(src)
+func (c *CryptoConn) Write(b []byte) (n int, err error) {
+	return c.w.Write(b)
 }
 
 // Dial target and return a cipher conn

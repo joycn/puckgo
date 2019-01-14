@@ -1,4 +1,4 @@
-all: linux macos
+all: macos linux
 
 macos:
 	GOOS=darwin go build -ldflags "-w -s"

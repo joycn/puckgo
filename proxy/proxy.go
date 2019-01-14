@@ -171,10 +171,11 @@ func (p *Proxy) handleConn(rawConn net.Conn) error {
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"localsrc":  src.RemoteAddr(),
-		"localdst":  src.LocalAddr(),
-		"remotesrc": dst.LocalAddr(),
-		"remotedst": dst.RemoteAddr(),
+		"localsrc":   src.RemoteAddr(),
+		"localdst":   src.LocalAddr(),
+		"remotesrc":  dst.LocalAddr(),
+		"remotedst":  dst.RemoteAddr(),
+		"remotehost": addr.String(),
 	}).Info("session info")
 
 	wg.Add(2)
