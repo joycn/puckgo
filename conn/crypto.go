@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/joycn/datasource"
 	"github.com/joycn/socks"
+	"io"
 	"net"
 )
 
@@ -20,6 +21,10 @@ type CryptoDialer struct {
 	key          []byte
 	match        bool
 	*datasource.AccessList
+}
+
+type writerOnly struct {
+	io.Writer
 }
 
 // NewCryptoDialer create CryptoDialer with a base64 string
@@ -37,6 +42,11 @@ type CryptoConn struct {
 	*net.TCPConn
 	r *cipher.StreamReader
 	w *cipher.StreamWriter
+}
+
+// ReadFrom overwrite TCPConn RaedFrom
+func (c *CryptoConn) ReadFrom(r io.Reader) (n int64, err error) {
+	return io.Copy(writerOnly{c}, r)
 }
 
 func (c *CryptoConn) Read(b []byte) (n int, err error) {
@@ -70,9 +80,10 @@ func (d *CryptoDialer) Dial(addr *socks.AddrSpec) (c net.Conn, err error) {
 	}
 	ciphertext := make([]byte, aes.BlockSize)
 	iv := ciphertext[:aes.BlockSize]
-	stream := cipher.NewOFB(block, iv[:])
-	cc.r = &cipher.StreamReader{S: stream, R: c}
-	cc.w = &cipher.StreamWriter{S: stream, W: c}
+	rstream := cipher.NewOFB(block, iv[:])
+	wstream := cipher.NewOFB(block, iv[:])
+	cc.r = &cipher.StreamReader{S: rstream, R: c}
+	cc.w = &cipher.StreamWriter{S: wstream, W: c}
 	if err = socks.Connect(cc, addr, true); err != nil {
 		return nil, err
 	}
@@ -93,9 +104,10 @@ func newCryptoConn(c net.Conn, key []byte) (*CryptoConn, error) {
 	}
 	ciphertext := make([]byte, aes.BlockSize)
 	iv := ciphertext[:aes.BlockSize]
-	stream := cipher.NewOFB(block, iv[:])
-	cc.r = &cipher.StreamReader{S: stream, R: c}
-	cc.w = &cipher.StreamWriter{S: stream, W: c}
+	rstream := cipher.NewOFB(block, iv[:])
+	wstream := cipher.NewOFB(block, iv[:])
+	cc.r = &cipher.StreamReader{S: rstream, R: c}
+	cc.w = &cipher.StreamWriter{S: wstream, W: c}
 	return cc, nil
 }
 

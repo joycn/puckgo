@@ -30,29 +30,3 @@ func (p *Proxy) setSocksLocalMode(ma *datasource.AccessList, proxyConfig *config
 	p.Reception = r
 	return nil
 }
-
-func (p *Proxy) setSocksServerMode(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) error {
-	config := &socks.Config{}
-	socks5, err := socks.New(config)
-	if err != nil {
-		return err
-	}
-
-	var r conn.Reception
-
-	if proxyConfig.Key != "" {
-		r, err = conn.NewCryptoReception(socks5, proxyConfig.Key)
-		if err != nil {
-			return err
-		}
-	} else {
-		r, err = conn.NewNormalReception(socks5)
-		if err != nil {
-			return err
-		}
-	}
-	s := &conn.DirectDialer{ma, true}
-	p.Dialer = s
-	p.Reception = r
-	return nil
-}

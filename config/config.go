@@ -27,17 +27,17 @@ type ProxyProtocolMap map[string][]int
 
 // ProxyConfig config for proxy
 type ProxyConfig struct {
-	Transparent *TransparentProxyConfig
-	Listen      string
-	Upstream    string
-	Bind        string
-	Timeout     int
-	Key         string
+	DNSConfig *DNSConfig
+	Listen    string
+	Upstream  string
+	Bind      string
+	Timeout   int
+	Key       string
 	Mode
 }
 
-// TransparentProxyConfig config params for transparent proxy
-type TransparentProxyConfig struct {
+// DNSConfig config params for transparent proxy
+type DNSConfig struct {
 	Listen          string
 	DefaultServer   string
 	SpecifiedServer string
