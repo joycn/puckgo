@@ -21,11 +21,19 @@ func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *confi
 	}
 	f := dnsforward.NewDNSForwarder(ma)
 	dnsConfig := proxyConfig.DNSConfig
-	go f.StartDNS(dnsConfig.DefaultServer, dnsConfig.SpecifiedServer, dnsConfig.Listen)
+	go f.StartDNS(dnsConfig.SpecifiedServer, dnsConfig.Listen)
 	r := &conn.Transparent{DNS: f}
-	s, err := conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key, true, ma)
-	if err != nil {
-		return err
+	var s conn.Dialer
+	if proxyConfig.Key != "" {
+		s, err = conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key, true, ma)
+		if err != nil {
+			return err
+		}
+	} else {
+		s, err = conn.NewNormalDialer("tcp4", proxyConfig.Upstream, true, ma)
+		if err != nil {
+			return err
+		}
 	}
 	p.Dialer = s
 	p.Reception = r
@@ -33,9 +41,9 @@ func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *confi
 }
 
 func (p *Proxy) setSocksServerMode(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) error {
-	f := dnsforward.NewDNSForwarder(ma)
-	dnsConfig := proxyConfig.DNSConfig
-	go f.StartDNS("", dnsConfig.SpecifiedServer, dnsConfig.Listen)
+	//f := dnsforward.NewDNSForwarder(ma)
+	//dnsConfig := proxyConfig.DNSConfig
+	//go f.StartDNS("", dnsConfig.SpecifiedServer, dnsConfig.Listen)
 
 	config := &socks.Config{}
 	socks5, err := socks.New(config)

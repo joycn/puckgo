@@ -38,16 +38,14 @@ type ProxyConfig struct {
 
 // DNSConfig config params for transparent proxy
 type DNSConfig struct {
-	Listen          string
-	DefaultServer   string
+	Listen string
+	//DefaultServer   string
 	SpecifiedServer string
 }
 
 const (
 	//DefaultDataSource use /usr/loca/etc/dns/forward/datasource as url list by default
 	DefaultDataSource = "file:/usr/local/etc/dns/forward/datasource"
-	// DefaultServer DNS server for DNS in China
-	DefaultServer = "114.114.114.114:53"
 	// SpecifiedServer DNS server for DNS outside China
 	SpecifiedServer = "8.8.8.8:53"
 	// DefaultListen listen address and port
