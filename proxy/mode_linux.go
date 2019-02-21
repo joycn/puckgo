@@ -3,9 +3,9 @@ package proxy
 import (
 	"fmt"
 	"github.com/joycn/datasource"
-	"github.com/joycn/dnsforward"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
+	"github.com/joycn/puckgo/dnsforward"
 	"github.com/joycn/puckgo/network"
 	"github.com/joycn/socks"
 )

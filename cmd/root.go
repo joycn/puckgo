@@ -59,7 +59,7 @@ func init() {
 	// Cobra supports Persistent Flags, which, if defined here,
 	// will be global for your application.
 
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.dnsforward.yaml)")
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.puckgo.yaml)")
 	RootCmd.PersistentFlags().BoolVarP(&config.PublicService, "public", "p", false, "whether run in public service mode")
 	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

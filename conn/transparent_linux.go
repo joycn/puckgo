@@ -1,7 +1,7 @@
 package conn
 
 import (
-	"github.com/joycn/dnsforward"
+	"github.com/joycn/puckgo/dnsforward"
 	"github.com/joycn/socks"
 	"net"
 )
