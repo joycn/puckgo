@@ -4,6 +4,7 @@ import (
 	"github.com/joycn/datasource"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
+	"github.com/joycn/puckgo/network"
 	"github.com/joycn/socks"
 )
 
@@ -13,7 +14,7 @@ func (p *Proxy) setSocksLocalMode(ma *datasource.AccessList, proxyConfig *config
 	if err != nil {
 		return err
 	}
-	var ps conn.Dialer
+	var ps network.Dialer
 	if proxyConfig.Key != "" {
 		ps, err = conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key, false, ma)
 		if err != nil {

@@ -24,7 +24,7 @@ func NewNormalDialer(network, upstream string, match bool, ma *datasource.Access
 func (d *NormalDialer) Dial(addr *socks.AddrSpec) (c net.Conn, err error) {
 	if d.match {
 		if match := d.MatchDomain(addr.FQDN); !match {
-			return nil, fmt.Errorf("FQDN not match")
+			return nil, fmt.Errorf("FQDN not match %s", addr.FQDN)
 		}
 	}
 

@@ -20,6 +20,8 @@ func (t *Transparent) Recept(c net.Conn) (*socks.AddrSpec, net.Conn, error) {
 	host, found := t.DNS.GetDomain(ipAddress)
 	if found {
 		addr.FQDN = host
+	} else {
+		addr.FQDN = ipAddress
 	}
 	return addr, c, nil
 
