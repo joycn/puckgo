@@ -34,11 +34,6 @@ type Peer struct {
 	Type    string
 }
 
-// Dialer function type for dial
-type Dialer interface {
-	Dial(addr *socks.AddrSpec) (c net.Conn, err error)
-}
-
 // Reception function type to get request target
 type Reception interface {
 	Recept(c net.Conn) (*socks.AddrSpec, net.Conn, error)

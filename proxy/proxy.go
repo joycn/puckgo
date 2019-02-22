@@ -5,6 +5,7 @@ import (
 	"github.com/joycn/datasource"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
+	"github.com/joycn/puckgo/network"
 	"github.com/sirupsen/logrus"
 	"sync"
 	//"github.com/joycn/puckgo/sni"
@@ -46,7 +47,7 @@ type Proxy struct {
 	Timeout      time.Duration
 	Listener     *net.TCPListener
 	UpstreamAddr *net.TCPAddr
-	conn.Dialer
+	network.Dialer
 	conn.Reception
 }
 

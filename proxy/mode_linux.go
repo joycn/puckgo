@@ -19,11 +19,8 @@ func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *confi
 	if err := network.ConfigTransparentNetwork(); err != nil {
 		return err
 	}
-	f := dnsforward.NewDNSForwarder(ma)
-	dnsConfig := proxyConfig.DNSConfig
-	go f.StartDNS(dnsConfig.SpecifiedServer, dnsConfig.Listen)
-	r := &conn.Transparent{DNS: f}
-	var s conn.Dialer
+
+	var s network.Dialer
 	if proxyConfig.Key != "" {
 		s, err = conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key, true, ma)
 		if err != nil {
@@ -35,6 +32,10 @@ func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *confi
 			return err
 		}
 	}
+	dnsConfig := proxyConfig.DNSConfig
+	f := dnsforward.NewDNSForwarder(dnsConfig.Listen, dnsConfig.SpecifiedServer, ma, s)
+	go f.StartDNS()
+	r := &conn.Transparent{DNS: f}
 	p.Dialer = s
 	p.Reception = r
 	return nil

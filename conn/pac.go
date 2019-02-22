@@ -2,6 +2,7 @@ package conn
 
 import (
 	"github.com/joycn/datasource"
+	"github.com/joycn/puckgo/network"
 	"github.com/joycn/socks"
 	"net"
 )
@@ -9,8 +10,8 @@ import (
 // Pac proxy auto config mode
 type Pac struct {
 	//CryptoDialer *CryptoDialer
-	SpecDialer   Dialer
-	DirectDialer Dialer
+	SpecDialer   network.Dialer
+	DirectDialer network.Dialer
 	*datasource.AccessList
 }
 

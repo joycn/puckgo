@@ -2,7 +2,11 @@ package dnsforward
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"github.com/joycn/datasource"
+	"github.com/joycn/puckgo/network"
+	"github.com/joycn/socks"
 	"github.com/joycn/ttlcache"
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
@@ -15,6 +19,10 @@ import (
 	"time"
 )
 
+const (
+	defaultTTL = 3600
+)
+
 // DNSConfig dns config params for dns server
 type DNSConfig struct {
 	Listen          string
@@ -25,20 +33,31 @@ type DNSConfig struct {
 // DNSForwarder forward target dns request to special server
 type DNSForwarder struct {
 	listen     string
-	upstream   *socks.AddrSpec
 	al         *datasource.AccessList
 	dnsCache   *ttlcache.Cache
 	socksCache *ttlcache.Cache
+	resolver   *net.Resolver
 }
 
+type resolverDial func(ctx context.Context, network, address string) (net.Conn, error)
+
 // NewDNSForwarder return a new dns forwarder
-func NewDNSForwarder(al *datasource.AccessList) *DNSForwarder {
-	f := &DNSForwarder{}
+func NewDNSForwarder(listen, upstream string, al *datasource.AccessList, dialer network.Dialer) *DNSForwarder {
+	f := &DNSForwarder{listen: listen, al: al}
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		upstreamAddr := &socks.AddrSpec{IP: net.ParseIP(upstream)}
+		return dialer.Dial(upstreamAddr)
+	}
+	f.resolver = &net.Resolver{PreferGo: true, Dial: dial}
 	f.dnsCache = ttlcache.New(time.Minute, 5*time.Minute)
 	f.socksCache = ttlcache.New(time.Minute, 5*time.Minute)
-	f.al = al
 	return f
 }
+
+//// Dial speicial dial to puckgo server
+//func (f *DNSForwarder) Dial(ctx context.Context, network, address string) (Conn, error) {
+//addr := &socks.AddrSpec{IP: net.ParseIP(upstream)}
+//}
 
 // GetDomain search ip in dnsCache and return related domain
 func (f *DNSForwarder) GetDomain(ip string) (string, bool) {
@@ -104,6 +123,14 @@ func (f *DNSForwarder) installIPset(msg *dns.Msg) {
 	}
 }
 
+func updateIPset(result []net.IPAddr) {
+	for _, r := range result {
+		netlink.IPsetUpdateTimeout("vpn", r.IP, defaultTTL)
+		//host := updateCache(f.socksCache, a.A.String(), h.Name, time.Duration(ttl)*time.Second, false)
+		//f.dnsCache.Store(host, a.A, time.Duration(ttl)*time.Second, false)
+	}
+}
+
 func (f *DNSForwarder) readFromServer(r, s net.PacketConn, ipset bool) {
 	b := make([]byte, 1500)
 	for {
@@ -162,6 +189,35 @@ func listenUDP(network, address string) (c net.PacketConn, err error) {
 	return net.FilePacketConn(f)
 }
 
+func reply(query *dns.Msg, result []net.IPAddr) *dns.Msg {
+	if len(query.Question) == 0 {
+		return nil
+	}
+
+	if query.Question[0].Qtype != dns.TypeA {
+		return nil
+	}
+
+	domain := query.Question[0].Name
+
+	reply := &dns.Msg{}
+	reply.SetReply(query)
+	reply.Authoritative = true
+	for _, r := range result {
+		aRecord := &dns.A{
+			Hdr: dns.RR_Header{
+				Name:   domain,
+				Rrtype: dns.TypeA,
+				Class:  dns.ClassINET,
+				Ttl:    defaultTTL,
+			},
+			A: r.IP,
+		}
+		reply.Answer = append(reply.Answer, aRecord)
+	}
+	return reply
+}
+
 func (f *DNSForwarder) replyFromCache(query *dns.Msg) *dns.Msg {
 	if len(query.Question) == 0 {
 		return nil
@@ -193,35 +249,46 @@ func (f *DNSForwarder) replyFromCache(query *dns.Msg) *dns.Msg {
 	return reply
 }
 
+func (f *DNSForwarder) process(conn net.PacketConn, raddr net.Addr, msg *dns.Msg) {
+	ctx := context.Background()
+	q := msg.Question[0]
+	name := q.Name
+	matched := f.al.MatchDomain(name)
+	var result = []net.IPAddr{}
+	var err error
+	if matched && q.Qtype == dns.TypeA {
+		result, err = f.resolver.LookupIPAddr(ctx, name)
+	} else {
+		result, err = net.DefaultResolver.LookupIPAddr(ctx, name)
+		updateIPset(result)
+	}
+
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+
+	replyMsg := reply(msg, result)
+	data, err := replyMsg.Pack()
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	conn.WriteTo(data, raddr)
+}
+
 // StartDNS start dns server to forward or answer dns query
-func (f *DNSForwarder) StartDNS(special, listen string) error {
-	var defaultServerConn, specifiedServerConn *net.UDPConn
+func (f *DNSForwarder) StartDNS() error {
 	onFlyMap = make(map[uint16]*request)
 	m = sync.Mutex{}
 
-	defaultServerAddr, err := net.ResolveUDPAddr("udp", listen)
-	defaultServerConn, err = net.DialUDP("udp", nil, defaultServerAddr)
-	if err != nil {
-		logrus.Error(err)
-		return err
-	}
-
-	specifiedServerAddr, err := net.ResolveUDPAddr("udp", special)
-	specifiedServerConn, err = net.DialUDP("udp", nil, specifiedServerAddr)
-	if err != nil {
-		logrus.Error(err)
-		return err
-	}
-
 	var conn net.PacketConn
 
-	conn, err = listenUDP("udp", listen)
+	conn, err := listenUDP("udp", f.listen)
 	if err != nil {
 		logrus.Error(err)
 		return err
 	}
-
-	go f.readFromServer(defaultServerConn, conn, false)
 
 	for {
 		b := make([]byte, 1500)
@@ -236,35 +303,12 @@ func (f *DNSForwarder) StartDNS(special, listen string) error {
 			logrus.Error(err)
 			continue
 		}
-
-		if reply := f.replyFromCache(msg); reply != nil {
-			data, err := reply.Pack()
-			if err == nil {
-				conn.WriteTo(data, remote)
-				continue
-			}
+		if len(msg.Question) == 0 {
+			logrus.Error(fmt.Errorf("no question found"))
+			continue
 		}
 
-		if len(msg.Question) > 0 {
-			q := msg.Question[0]
-			name := q.Name
-			matched := f.al.MatchDomain(name)
-			m.Lock()
-			onFlyMap[msg.Id] = &request{
-				Name:   msg.Question[0].Name,
-				Remote: remote,
-			}
-			m.Unlock()
+		go f.process(conn, remote, msg)
 
-			if matched && q.Qtype == dns.TypeA {
-				_, err = specifiedServerConn.Write(b[:n])
-			} else {
-				_, err = defaultServerConn.Write(b[:n])
-			}
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
-		}
 	}
 }
