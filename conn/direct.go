@@ -17,7 +17,7 @@ type DirectDialer struct {
 func (d *DirectDialer) Dial(addr *socks.AddrSpec) (c net.Conn, err error) {
 	if d.Match {
 		if match := d.MatchDomain(addr.FQDN); !match {
-			return nil, fmt.Errorf("FQDN not match")
+			return nil, fmt.Errorf("FQDN not match %s", addr.FQDN)
 		}
 	}
 	return net.Dial("tcp4", addr.String())

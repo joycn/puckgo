@@ -14,7 +14,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -42,16 +41,20 @@ type DNSForwarder struct {
 type resolverDial func(ctx context.Context, network, address string) (net.Conn, error)
 
 // NewDNSForwarder return a new dns forwarder
-func NewDNSForwarder(listen, upstream string, al *datasource.AccessList, dialer network.Dialer) *DNSForwarder {
+func NewDNSForwarder(listen, upstream string, al *datasource.AccessList, dialer network.Dialer) (*DNSForwarder, error) {
+	addr, err := net.ResolveTCPAddr("tcp", upstream)
+	if err != nil {
+		return nil, err
+	}
 	f := &DNSForwarder{listen: listen, al: al}
 	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
-		upstreamAddr := &socks.AddrSpec{IP: net.ParseIP(upstream)}
+		upstreamAddr := &socks.AddrSpec{IP: addr.IP, FQDN: addr.IP.To4().String(), Port: addr.Port}
 		return dialer.Dial(upstreamAddr)
 	}
 	f.resolver = &net.Resolver{PreferGo: true, Dial: dial}
 	f.dnsCache = ttlcache.New(time.Minute, 5*time.Minute)
 	f.socksCache = ttlcache.New(time.Minute, 5*time.Minute)
-	return f
+	return f, nil
 }
 
 //// Dial speicial dial to puckgo server
@@ -123,48 +126,16 @@ func (f *DNSForwarder) installIPset(msg *dns.Msg) {
 	}
 }
 
-func updateIPset(result []net.IPAddr) {
+func (f *DNSForwarder) updateIPset(name string, result []net.IPAddr) {
 	for _, r := range result {
-		netlink.IPsetUpdateTimeout("vpn", r.IP, defaultTTL)
-		//host := updateCache(f.socksCache, a.A.String(), h.Name, time.Duration(ttl)*time.Second, false)
+		if r.IP.To4() != nil {
+			logrus.Debug(fmt.Sprintf("update ipset vpn %s", r.IP.String()))
+			netlink.IPsetUpdateTimeout("vpn", r.IP, defaultTTL)
+			updateCache(f.socksCache, r.IP.String(), name, defaultTTL*time.Second, false)
+		}
 		//f.dnsCache.Store(host, a.A, time.Duration(ttl)*time.Second, false)
 	}
 }
-
-func (f *DNSForwarder) readFromServer(r, s net.PacketConn, ipset bool) {
-	b := make([]byte, 1500)
-	for {
-		n, _, err := r.ReadFrom(b)
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		msg := new(dns.Msg)
-		err = msg.Unpack(b[:n])
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-
-		m.Lock()
-		rq, ok := onFlyMap[msg.Id]
-		m.Unlock()
-		if !ok {
-			continue
-		}
-		msg = new(dns.Msg)
-		err = msg.Unpack(b[:n])
-		if err == nil {
-			if ipset {
-				f.installIPset(msg)
-			}
-			s.WriteTo(b[:n], rq.Remote)
-		}
-	}
-}
-
-var onFlyMap map[uint16]*request
-var m sync.Mutex
 
 func listenUDP(network, address string) (c net.PacketConn, err error) {
 	s, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
@@ -204,6 +175,9 @@ func reply(query *dns.Msg, result []net.IPAddr) *dns.Msg {
 	reply.SetReply(query)
 	reply.Authoritative = true
 	for _, r := range result {
+		if r.IP.To4() == nil {
+			continue
+		}
 		aRecord := &dns.A{
 			Hdr: dns.RR_Header{
 				Name:   domain,
@@ -249,45 +223,74 @@ func (f *DNSForwarder) replyFromCache(query *dns.Msg) *dns.Msg {
 	return reply
 }
 
-func (f *DNSForwarder) process(conn net.PacketConn, raddr net.Addr, msg *dns.Msg) {
+func (f *DNSForwarder) process(conn net.PacketConn, raddr, saddr net.Addr, msg *dns.Msg) {
 	ctx := context.Background()
 	q := msg.Question[0]
 	name := q.Name
 	matched := f.al.MatchDomain(name)
 	var result = []net.IPAddr{}
 	var err error
-	if matched && q.Qtype == dns.TypeA {
-		result, err = f.resolver.LookupIPAddr(ctx, name)
-	} else {
-		result, err = net.DefaultResolver.LookupIPAddr(ctx, name)
-		updateIPset(result)
+	if !matched || q.Qtype != dns.TypeA {
+		c, err := net.DialUDP("udp", nil, saddr.(*net.UDPAddr))
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		data, err := msg.Pack()
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		c.SetDeadline(time.Now().Add(time.Second * 3))
+		if _, err := c.Write(data); err != nil {
+			logrus.Error(err)
+			return
+		}
+
+		b := make([]byte, 1500)
+		if n, err := c.Read(b); err == nil {
+			conn.WriteTo(b[:n], raddr)
+		} else {
+			logrus.Error(err)
+			return
+		}
 	}
+	result, err = f.resolver.LookupIPAddr(ctx, name)
 
 	if err != nil {
 		logrus.Error(err)
 		return
 	}
 
+	f.updateIPset(name, result)
 	replyMsg := reply(msg, result)
+
+	if replyMsg == nil {
+		return
+	}
+
 	data, err := replyMsg.Pack()
 	if err != nil {
 		logrus.Error(err)
 		return
 	}
 	conn.WriteTo(data, raddr)
+	return
 }
 
 // StartDNS start dns server to forward or answer dns query
 func (f *DNSForwarder) StartDNS() error {
-	onFlyMap = make(map[uint16]*request)
-	m = sync.Mutex{}
 
 	var conn net.PacketConn
 
-	conn, err := listenUDP("udp", f.listen)
+	resolverAddr, err := net.ResolveUDPAddr("udp", f.listen)
 	if err != nil {
 		logrus.Error(err)
 		return err
+	}
+
+	conn, err = listenUDP("udp", f.listen)
+	if err != nil {
 	}
 
 	for {
@@ -308,7 +311,7 @@ func (f *DNSForwarder) StartDNS() error {
 			continue
 		}
 
-		go f.process(conn, remote, msg)
+		go f.process(conn, remote, resolverAddr, msg)
 
 	}
 }

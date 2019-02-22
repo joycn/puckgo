@@ -33,7 +33,10 @@ func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *confi
 		}
 	}
 	dnsConfig := proxyConfig.DNSConfig
-	f := dnsforward.NewDNSForwarder(dnsConfig.Listen, dnsConfig.SpecifiedServer, ma, s)
+	f, err := dnsforward.NewDNSForwarder(dnsConfig.Listen, dnsConfig.SpecifiedServer, ma, s)
+	if err != nil {
+		return err
+	}
 	go f.StartDNS()
 	r := &conn.Transparent{DNS: f}
 	p.Dialer = s
