@@ -83,7 +83,7 @@ func NewProxy(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) (*Prox
 }
 
 // StartProxy start proxy to handle http and https
-func (p *Proxy) StartProxy(ma *datasource.AccessList) {
+func (p *Proxy) StartProxy() {
 
 	var err error
 

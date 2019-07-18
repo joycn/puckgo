@@ -1,4 +1,4 @@
-TYPE="rpm"
+TYPE="deb"
 PACKAGE_NAME="puckgo"
 VERSION="1.0.0"
 VENDOR="puck"

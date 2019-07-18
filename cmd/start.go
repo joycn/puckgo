@@ -39,6 +39,6 @@ func start(cfg *config.Config) error {
 		fmt.Println(err)
 		return err
 	}
-	p.StartProxy(al)
+	p.StartProxy()
 	return nil
 }
