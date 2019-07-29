@@ -3,12 +3,12 @@ package conn
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"encoding/base64"
 	"fmt"
-	"github.com/joycn/datasource"
-	"github.com/joycn/socks"
 	"io"
 	"net"
+
+	"github.com/joycn/datasource"
+	"github.com/joycn/socks"
 )
 
 const magicChar = "RojvQ_OWDeEGMBXIZF4Cy5nVJgqiSs3-1twbHKNf+rT8Ldm2ckPhl79zAxauYp6U"
@@ -20,21 +20,16 @@ type CryptoDialer struct {
 	UpstreamAddr string
 	key          []byte
 	match        bool
-	*datasource.AccessList
+	datasource.AccessList
 }
 
 type writerOnly struct {
 	io.Writer
 }
 
-// NewCryptoDialer create CryptoDialer with a base64 string
-func NewCryptoDialer(network, upstream, key string, match bool, ma *datasource.AccessList) (*CryptoDialer, error) {
-	var ngEncoder = base64.NewEncoding(magicChar).WithPadding(paddingRune)
-	data, err := ngEncoder.DecodeString(key)
-	if err != nil {
-		return nil, err
-	}
-	return &CryptoDialer{Network: network, UpstreamAddr: upstream, key: data, AccessList: ma, match: match}, nil
+// NewCryptoDialer create CryptoDialer with a password
+func NewCryptoDialer(network, upstream, key string, match bool, ma datasource.AccessList) (*CryptoDialer, error) {
+	return &CryptoDialer{Network: network, UpstreamAddr: upstream, key: []byte(key), AccessList: ma, match: match}, nil
 }
 
 // CryptoConn conn with cipher
@@ -119,12 +114,7 @@ type CryptoReception struct {
 
 // NewCryptoReception return a CryptoReception with noauth socks server
 func NewCryptoReception(s *socks.Server, key string) (*CryptoReception, error) {
-	var ngEncoder = base64.NewEncoding(magicChar).WithPadding(paddingRune)
-	data, err := ngEncoder.DecodeString(key)
-	if err != nil {
-		return nil, err
-	}
-	r := &CryptoReception{s: s, key: data}
+	r := &CryptoReception{s: s, key: []byte(key)}
 	r.s.NoAuth = true
 	return r, nil
 }

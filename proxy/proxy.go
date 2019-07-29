@@ -52,11 +52,11 @@ type Proxy struct {
 }
 
 // NewProxy create a new proxy
-func NewProxy(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) (*Proxy, error) {
+func NewProxy(ma datasource.AccessList, proxyConfig *config.ProxyConfig) (*Proxy, error) {
 	p := &Proxy{
 		Mode: proxyConfig.Mode,
 	}
-	p.Timeout = time.Duration(proxyConfig.Timeout) * time.Millisecond
+	p.Timeout = time.Duration(proxyConfig.Timeout) * time.Second
 
 	lnsa, err := net.ResolveTCPAddr("tcp", proxyConfig.Listen)
 	if err != nil {

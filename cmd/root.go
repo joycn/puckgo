@@ -60,8 +60,11 @@ func init() {
 	// will be global for your application.
 
 	RootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is $HOME/.puckgo.yaml)")
-	RootCmd.PersistentFlags().BoolVarP(&config.PublicService, "public", "p", false, "whether run in public service mode")
-	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.PersistentFlags().StringVarP(&cfg.DataSource, "accesslist", "a", "pass://pass", "access list datasource")
+	RootCmd.PersistentFlags().StringVarP(&cfg.Listen, "listen", "l", "127.0.0.1", "access list datasource")
+	RootCmd.PersistentFlags().IntVarP(&cfg.Timeout, "timeout", "t", 300, "access list datasource")
+	RootCmd.PersistentFlags().StringVar(&cfg.LogLevel, "loglevel", "warn", "log level")
+	//RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 // initConfig reads in config file and ENV variables if set.

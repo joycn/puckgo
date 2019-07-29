@@ -9,7 +9,7 @@ import (
 
 // DirectDialer dial target
 type DirectDialer struct {
-	*datasource.AccessList
+	datasource.AccessList
 	Match bool
 }
 

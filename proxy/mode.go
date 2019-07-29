@@ -8,15 +8,15 @@ import (
 	"github.com/joycn/socks"
 )
 
-func (p *Proxy) setSocksLocalMode(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) error {
+func (p *Proxy) setSocksLocalMode(ma datasource.AccessList, proxyConfig *config.ProxyConfig) error {
 	config := &socks.Config{}
 	r, err := socks.New(config)
 	if err != nil {
 		return err
 	}
 	var ps network.Dialer
-	if proxyConfig.Key != "" {
-		ps, err = conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key, false, ma)
+	if proxyConfig.Password != "" {
+		ps, err = conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Password, false, ma)
 		if err != nil {
 			return err
 		}

@@ -1,8 +1,5 @@
 package config
 
-// PublicService whether run as a public service mode or a local gw mode
-var PublicService bool
-
 // Mode for proxy type
 type Mode string
 
@@ -19,6 +16,8 @@ const (
 type Config struct {
 	LogLevel   string
 	DataSource string
+	Listen     string
+	Timeout    int
 	Proxy      ProxyConfig
 }
 
@@ -30,9 +29,8 @@ type ProxyConfig struct {
 	DNSConfig *DNSConfig
 	Listen    string
 	Upstream  string
-	Bind      string
 	Timeout   int
-	Key       string
+	Password  string
 	Mode
 }
 
@@ -53,7 +51,7 @@ const (
 	// DefaultProxyListen local transparent proxy listen on
 	DefaultProxyListen = ":1200"
 	// DefaultProxyTimeout conn timeout for upstream
-	DefaultProxyTimeout = 3000
+	DefaultProxyTimeout = 300
 	// DefaultSocks5Listen default address listen for socks5 proxy
 	DefaultSocks5Listen = ":1080"
 )

@@ -12,11 +12,11 @@ type NormalDialer struct {
 	Network      string
 	UpstreamAddr string
 	match        bool
-	*datasource.AccessList
+	datasource.AccessList
 }
 
 // NewNormalDialer create NormalDialer with a base64 string
-func NewNormalDialer(network, upstream string, match bool, ma *datasource.AccessList) (*NormalDialer, error) {
+func NewNormalDialer(network, upstream string, match bool, ma datasource.AccessList) (*NormalDialer, error) {
 	return &NormalDialer{Network: network, UpstreamAddr: upstream, AccessList: ma, match: match}, nil
 }
 

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+
 	"github.com/joycn/datasource"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
@@ -10,7 +11,7 @@ import (
 	"github.com/joycn/socks"
 )
 
-func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) error {
+func (p *Proxy) setTransparentMode(ma datasource.AccessList, proxyConfig *config.ProxyConfig) error {
 	err := network.SetTransparentOpt(p.Listener)
 
 	if proxyConfig.DNSConfig == nil {
@@ -21,8 +22,8 @@ func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *confi
 	}
 
 	var s network.Dialer
-	if proxyConfig.Key != "" {
-		s, err = conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Key, true, ma)
+	if proxyConfig.Password != "" {
+		s, err = conn.NewCryptoDialer("tcp4", proxyConfig.Upstream, proxyConfig.Password, true, ma)
 		if err != nil {
 			return err
 		}
@@ -44,7 +45,7 @@ func (p *Proxy) setTransparentMode(ma *datasource.AccessList, proxyConfig *confi
 	return nil
 }
 
-func (p *Proxy) setSocksServerMode(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) error {
+func (p *Proxy) setSocksServerMode(ma datasource.AccessList, proxyConfig *config.ProxyConfig) error {
 	//f := dnsforward.NewDNSForwarder(ma)
 	//dnsConfig := proxyConfig.DNSConfig
 	//go f.StartDNS("", dnsConfig.SpecifiedServer, dnsConfig.Listen)
@@ -57,8 +58,8 @@ func (p *Proxy) setSocksServerMode(ma *datasource.AccessList, proxyConfig *confi
 
 	var r conn.Reception
 
-	if proxyConfig.Key != "" {
-		r, err = conn.NewCryptoReception(socks5, proxyConfig.Key)
+	if proxyConfig.Password != "" {
+		r, err = conn.NewCryptoReception(socks5, proxyConfig.Password)
 		if err != nil {
 			return err
 		}
@@ -74,7 +75,7 @@ func (p *Proxy) setSocksServerMode(ma *datasource.AccessList, proxyConfig *confi
 	return nil
 }
 
-func (p *Proxy) updateModeConfig(ma *datasource.AccessList, proxyConfig *config.ProxyConfig) error {
+func (p *Proxy) updateModeConfig(ma datasource.AccessList, proxyConfig *config.ProxyConfig) error {
 	switch p.Mode {
 	case config.TransparentMode:
 		return p.setTransparentMode(ma, proxyConfig)

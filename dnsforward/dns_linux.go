@@ -32,7 +32,7 @@ type DNSConfig struct {
 // DNSForwarder forward target dns request to special server
 type DNSForwarder struct {
 	listen     string
-	al         *datasource.AccessList
+	al         datasource.AccessList
 	dnsCache   *ttlcache.Cache
 	socksCache *ttlcache.Cache
 	resolver   *net.Resolver
@@ -41,7 +41,7 @@ type DNSForwarder struct {
 type resolverDial func(ctx context.Context, network, address string) (net.Conn, error)
 
 // NewDNSForwarder return a new dns forwarder
-func NewDNSForwarder(listen, upstream string, al *datasource.AccessList, dialer network.Dialer) (*DNSForwarder, error) {
+func NewDNSForwarder(listen, upstream string, al datasource.AccessList, dialer network.Dialer) (*DNSForwarder, error) {
 	addr, err := net.ResolveTCPAddr("tcp", upstream)
 	if err != nil {
 		return nil, err

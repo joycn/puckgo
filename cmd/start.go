@@ -25,7 +25,7 @@ func start(cfg *config.Config) error {
 		}()
 	}
 
-	al, err := datasource.GetAccessList(cfg.DataSource)
+	al, err := datasource.GetAccessInfo(cfg.DataSource)
 	if err != nil {
 		fmt.Println(err)
 		return err

@@ -12,7 +12,7 @@ type Pac struct {
 	//CryptoDialer *CryptoDialer
 	SpecDialer   network.Dialer
 	DirectDialer network.Dialer
-	*datasource.AccessList
+	datasource.AccessList
 }
 
 // Dial dial to proxy if match local list, otherwise dial directly
