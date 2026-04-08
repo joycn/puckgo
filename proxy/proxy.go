@@ -1,42 +1,18 @@
 package proxy
 
 import (
-	//"crypto/tls"
+	"fmt"
+	"io"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/joycn/datasource"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/conn"
 	"github.com/joycn/puckgo/network"
 	"github.com/sirupsen/logrus"
-	"sync"
-	//"github.com/joycn/puckgo/sni"
-	"fmt"
-	"golang.org/x/net/proxy"
-	"io"
-	"net"
-	"time"
 )
-
-var (
-	proxyDialer proxy.Dialer
-)
-
-//const magicChar = "RojvQ_OWDeEGMBXIZF4Cy5nVJgqiSs3-1twbHKNf+rT8Ldm2ckPhl79zAxauYp6U"
-
-//const paddingRune = '0'
-
-//func setTransparentOpt(l *net.TCPListener) error {
-//cs, err := l.File()
-//if err != nil {
-//logrus.WithFields(logrus.Fields{
-//"error": err.Error(),
-//}).Error("get listener file failed")
-//return err
-//}
-
-//defer cs.Close()
-
-//return syscall.SetsockoptInt(int(cs.Fd()), syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
-//}
 
 // ServeConn to hanlde new conn request
 type ServeConn func(conn net.Conn) error
@@ -84,15 +60,6 @@ func NewProxy(ma datasource.AccessList, proxyConfig *config.ProxyConfig) (*Proxy
 
 // StartProxy start proxy to handle http and https
 func (p *Proxy) StartProxy() {
-
-	var err error
-
-	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err.Error(),
-		}).Fatal("set tranparent failed")
-	}
-
 	for {
 		conn, err := p.Listener.AcceptTCP()
 		if err != nil {
@@ -115,7 +82,6 @@ type bidirectionalConn interface {
 func syncCopy(wg *sync.WaitGroup, dst, src bidirectionalConn) error {
 	defer wg.Done()
 	defer dst.CloseWrite()
-	//defer src.CloseRead()
 
 	_, err := io.Copy(dst, src)
 	return err

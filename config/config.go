@@ -4,12 +4,12 @@ package config
 type Mode string
 
 const (
-	// TransparentMode transparent proxy mode
-	TransparentMode Mode = "transparent"
 	// SocksLocalMode socks5 local for standard socks server
 	SocksLocalMode Mode = "local"
 	// SocksServerMode socks5 server mode for private mode socks server
 	SocksServerMode Mode = "server"
+	// RelayServerMode relay server mode: accepts like server, forwards like local with split-tunnel
+	RelayServerMode Mode = "relayServer"
 )
 
 // Config params for dnsforward
@@ -26,30 +26,16 @@ type ProxyProtocolMap map[string][]int
 
 // ProxyConfig config for proxy
 type ProxyConfig struct {
-	DNSConfig *DNSConfig
-	Listen    string
-	Upstream  string
-	Timeout   int
-	Password  string
+	Listen           string
+	Upstream         string
+	Timeout          int
+	Password         string
+	UpstreamUsername string
+	UpstreamPassword string
 	Mode
 }
 
-// DNSConfig config params for transparent proxy
-type DNSConfig struct {
-	Listen string
-	//DefaultServer   string
-	SpecifiedServer string
-}
-
 const (
-	//DefaultDataSource use /usr/loca/etc/dns/forward/datasource as url list by default
-	DefaultDataSource = "file:/usr/local/etc/dns/forward/datasource"
-	// SpecifiedServer DNS server for DNS outside China
-	SpecifiedServer = "8.8.8.8:53"
-	// DefaultListen listen address and port
-	DefaultListen = "0.0.0.0:53"
-	// DefaultProxyListen local transparent proxy listen on
-	DefaultProxyListen = ":1200"
 	// DefaultProxyTimeout conn timeout for upstream
 	DefaultProxyTimeout = 300
 	// DefaultSocks5Listen default address listen for socks5 proxy

@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+
 	"github.com/joycn/datasource"
 	"github.com/joycn/puckgo/config"
 	"github.com/joycn/puckgo/proxy"
 	"github.com/sirupsen/logrus"
-	"net/http"
 	// net pprof
 	//_ "net/http/pprof"
 )
@@ -25,16 +28,26 @@ func start(cfg *config.Config) error {
 		}()
 	}
 
-	al, err := datasource.GetAccessInfo(cfg.DataSource)
-	if err != nil {
-		fmt.Println(err)
-		return err
+	var al *datasource.AccessList
+	if strings.HasPrefix(cfg.DataSource, "pass://") {
+		al = &datasource.AccessList{
+			Domains: make(datasource.DomainMap),
+			Subnets: make(datasource.SubnetMap),
+			RWMutex: &sync.RWMutex{},
+		}
+	} else {
+		var err error
+		al, err = datasource.GetAccessList(cfg.DataSource)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
 	}
 	logrus.WithFields(logrus.Fields{
 		"datasource": al,
 	}).Debug("fetch access list success")
 
-	p, err := proxy.NewProxy(al, &cfg.Proxy)
+	p, err := proxy.NewProxy(*al, &cfg.Proxy)
 	if err != nil {
 		fmt.Println(err)
 		return err
